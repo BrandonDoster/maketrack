@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}External sources · MakeTrack{% endblock %}
+
+{% block content %}
+<header class="mb-6 flex items-end justify-between">
+  <div>
+    <h1 class="text-3xl font-semibold text-white">External sources</h1>
+    <p class="mt-1 text-sm text-slate-400">
+      Filament sources synced into MakeTrack. Spoolman is the only adapter today.
+    </p>
+  </div>
+  <a href="/sources/new"
+     class="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500">
+    + Add source
+  </a>
+</header>
+
+{% if last_sync_result %}
+  <div class="mb-4 rounded border border-emerald-700 bg-emerald-950/30 px-4 py-3 text-sm text-emerald-200">
+    Sync {{ last_sync_result.outcome }}: {{ last_sync_result.rows_upserted }} upserted, {{ last_sync_result.rows_archived }} archived.
+    {% if last_sync_result.error %}<span class="text-rose-200">Error: {{ last_sync_result.error }}</span>{% endif %}
+  </div>
+{% endif %}
+
+<section class="overflow-hidden rounded-lg border border-slate-800">
+  <table class="w-full divide-y divide-slate-800 text-sm">
+    <thead class="bg-slate-900 text-left text-xs uppercase tracking-wider text-slate-400">
+      <tr>
+        <th class="px-4 py-3">Name</th>
+        <th class="px-4 py-3">Type</th>
+        <th class="px-4 py-3">Base URL</th>
+        <th class="px-4 py-3">TTL</th>
+        <th class="px-4 py-3">Last sync</th>
+        <th class="px-4 py-3">Status</th>
+        <th class="px-4 py-3"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-slate-800 bg-slate-950">
+      {% for s in sources %}
+      <tr>
+        <td class="px-4 py-3 font-medium text-white">{{ s.name }}</td>
+        <td class="px-4 py-3 text-slate-300">{{ s.type }}</td>
+        <td class="px-4 py-3 font-mono text-xs text-slate-400">{{ s.base_url or '—' }}</td>
+        <td class="px-4 py-3 text-slate-400 tabular-nums">{{ (s.ttl_seconds // 3600) }}h</td>
+        <td class="px-4 py-3 text-slate-400">
+          {% if s.last_synced_at %}{{ s.last_synced_at.strftime('%Y-%m-%d %H:%M UTC') }}{% else %}never{% endif %}
+        </td>
+        <td class="px-4 py-3">
+          {% if s.enabled %}
+            <span class="rounded bg-emerald-900/50 px-2 py-0.5 text-xs text-emerald-300">enabled</span>
+          {% else %}
+            <span class="rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-400">disabled</span>
+          {% endif %}
+          {% if s.sync_in_progress %}
+            <span class="ml-1 rounded bg-sky-900/40 px-2 py-0.5 text-xs text-sky-300">syncing…</span>
+          {% endif %}
+        </td>
+        <td class="px-4 py-3 text-right">
+          <form method="post" action="/sources/{{ s.id }}/sync" class="inline">
+            <button class="text-emerald-400 hover:text-emerald-300">Sync now</button>
+          </form>
+          <span class="text-slate-700"> · </span>
+          <a href="/sources/{{ s.id }}/edit" class="text-slate-300 hover:text-emerald-300">Edit</a>
+        </td>
+      </tr>
+      {% else %}
+        <tr><td colspan="7" class="px-4 py-12 text-center text-slate-500">
+          No sources configured. Add one to start syncing filaments.
+        </td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

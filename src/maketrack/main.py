@@ -5,18 +5,25 @@ from contextlib import asynccontextmanager
 import structlog
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from maketrack import __version__
 from maketrack.config import get_settings
-from maketrack.db import get_engine
+from maketrack.db import get_engine, get_sessionmaker
 from maketrack.errors import NotFoundError, RemoteFilamentError
 from maketrack.logging import configure_logging
-from maketrack.routes.filaments import router as filaments_router
+from maketrack.routes.external_sources import router as api_sources_router
+from maketrack.routes.filaments import router as api_filaments_router
+from maketrack.routes.ui.dashboard import router as ui_dashboard_router
+from maketrack.routes.ui.filaments import router as ui_filaments_router
+from maketrack.routes.ui.sources import router as ui_sources_router
+from maketrack.sync import SyncScheduler, build_source
+from maketrack.templating import STATIC_DIR
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     configure_logging(settings.log_level)
     structlog.contextvars.bind_contextvars(user_id="local")
@@ -27,9 +34,15 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         bind_host=settings.bind_host,
         bind_port=settings.bind_port,
     )
-    yield
-    log.info("maketrack.shutdown")
-    await get_engine().dispose()
+    scheduler = SyncScheduler(get_sessionmaker(), source_factory=build_source)
+    scheduler.start()
+    app.state.scheduler = scheduler
+    try:
+        yield
+    finally:
+        scheduler.stop()
+        log.info("maketrack.shutdown")
+        await get_engine().dispose()
 
 
 def create_app() -> FastAPI:
@@ -87,7 +100,12 @@ def create_app() -> FastAPI:
             )
         return JSONResponse({"status": "ok", "version": __version__})
 
-    app.include_router(filaments_router)
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+    app.include_router(api_filaments_router)
+    app.include_router(api_sources_router)
+    app.include_router(ui_dashboard_router)
+    app.include_router(ui_filaments_router)
+    app.include_router(ui_sources_router)
 
     return app
 

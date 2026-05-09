@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit' if source else 'New' }} source · MakeTrack{% endblock %}
+
+{% block content %}
+<header class="mb-6">
+  <a href="/sources" class="text-sm text-slate-400 hover:text-emerald-400">← Sources</a>
+  <h1 class="mt-2 text-2xl font-semibold text-white">
+    {{ 'Edit external source' if source else 'New external source' }}
+  </h1>
+</header>
+
+{% if errors %}
+  <div class="mb-4 rounded border border-rose-700 bg-rose-950/40 px-4 py-3 text-sm text-rose-200">
+    <ul class="list-disc pl-5">
+      {% for err in errors %}<li>{{ err }}</li>{% endfor %}
+    </ul>
+  </div>
+{% endif %}
+
+<form method="post"
+      action="{{ '/sources/' + source.id|string if source else '/sources' }}"
+      class="space-y-5 rounded-lg border border-slate-800 bg-slate-900/50 p-6">
+  <label class="block">
+    <span class="block text-sm font-medium text-slate-300">Type</span>
+    <select name="type" class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:border-emerald-500 focus:outline-none">
+      {% set current_type = source.type if source else 'spoolman' %}
+      <option value="spoolman" {{ 'selected' if current_type == 'spoolman' }}>Spoolman</option>
+    </select>
+  </label>
+  <label class="block">
+    <span class="block text-sm font-medium text-slate-300">Name</span>
+    <input type="text" name="name" required
+           value="{{ (source.name if source else '') or '' }}"
+           placeholder="home spoolman"
+           class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:border-emerald-500 focus:outline-none">
+  </label>
+  <label class="block">
+    <span class="block text-sm font-medium text-slate-300">Base URL</span>
+    <input type="url" name="base_url"
+           value="{{ (source.base_url if source else '') or '' }}"
+           placeholder="http://localhost:7912"
+           class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:border-emerald-500 focus:outline-none">
+  </label>
+  <label class="block">
+    <span class="block text-sm font-medium text-slate-300">Auth token <span class="text-slate-500">(optional)</span></span>
+    <input type="password" name="auth_token"
+           value="{{ (source.auth_token if source else '') or '' }}"
+           class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:border-emerald-500 focus:outline-none">
+  </label>
+  <label class="block">
+    <span class="block text-sm font-medium text-slate-300">TTL (seconds)</span>
+    <input type="number" name="ttl_seconds" min="60"
+           value="{{ source.ttl_seconds if source else 86400 }}"
+           class="mt-1 w-32 rounded border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:border-emerald-500 focus:outline-none">
+    <span class="text-xs text-slate-500">86400 = 1 day. Lazy syncs run on browse if older than this.</span>
+  </label>
+  <label class="flex items-center gap-2">
+    <input type="checkbox" name="enabled" value="true" {{ 'checked' if not source or source.enabled }}
+           class="h-4 w-4 rounded border-slate-600 bg-slate-950 text-emerald-500 focus:ring-emerald-500">
+    <span class="text-sm font-medium text-slate-300">Enabled</span>
+  </label>
+
+  <div class="flex justify-between">
+    <div>
+      {% if source %}
+        <form method="post" action="/sources/{{ source.id }}/delete" class="inline">
+          <button class="rounded-md border border-rose-800 px-4 py-2 text-sm text-rose-300 hover:bg-rose-950/50">
+            Delete
+          </button>
+        </form>
+      {% endif %}
+    </div>
+    <div class="flex gap-2">
+      <a href="/sources" class="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800">Cancel</a>
+      <button type="submit"
+              class="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500">
+        Save
+      </button>
+    </div>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,37 @@
+<tr id="filament-{{ f.id }}" class="hover:bg-slate-900/50">
+  <td class="px-4 py-3">
+    <span class="inline-block h-5 w-5 rounded border border-slate-700"
+          style="background-color: {{ f.color_hex or '#1e293b' }}"></span>
+  </td>
+  <td class="px-4 py-3 font-medium text-white">{{ f.name or '—' }}</td>
+  <td class="px-4 py-3 text-slate-300">{{ f.material or '—' }}</td>
+  <td class="px-4 py-3 text-slate-400">{{ f.brand or '—' }}</td>
+  <td class="px-4 py-3 text-right tabular-nums text-slate-300">
+    {% if f.remaining_weight_g is not none %}
+      {{ '%.0f'|format(f.remaining_weight_g) }}g
+      {% if f.total_weight_g %}
+        <span class="text-slate-500">/ {{ '%.0f'|format(f.total_weight_g) }}g</span>
+      {% endif %}
+    {% else %}—{% endif %}
+  </td>
+  <td class="px-4 py-3">
+    {% if f.source == 'local' %}
+      <span class="rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-300">local</span>
+    {% else %}
+      <span class="rounded bg-amber-900/40 px-2 py-0.5 text-xs text-amber-300">{{ f.source }}</span>
+    {% endif %}
+  </td>
+  <td class="px-4 py-3 text-right">
+    {% if f.source == 'local' %}
+      <a href="/filaments/{{ f.id }}/edit"
+         class="text-emerald-400 hover:text-emerald-300">Edit</a>
+    {% else %}
+      {% if f.external_url %}
+        <a href="{{ f.external_url }}" target="_blank" rel="noopener"
+           class="text-amber-400 hover:text-amber-300">Open in {{ f.source }} ↗</a>
+      {% else %}
+        <span class="text-slate-600">read-only</span>
+      {% endif %}
+    {% endif %}
+  </td>
+</tr>

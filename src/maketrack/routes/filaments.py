@@ -3,9 +3,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from maketrack.db import get_session
+from maketrack.db import get_session, get_sessionmaker
 from maketrack.schemas.filament import FilamentCreate, FilamentRead, FilamentUpdate
 from maketrack.services import filaments as svc
+from maketrack.sync import build_source, ensure_fresh_sources
 
 router = APIRouter(prefix="/api/filaments", tags=["filaments"])
 
@@ -19,6 +20,10 @@ async def list_filaments(
     source: str | None = None,
     include_archived: bool = False,
 ) -> list[FilamentRead]:
+    # Lazy sync: refresh any enabled source whose TTL has elapsed before we
+    # serve. Failures inside the sync are logged but never surface here —
+    # stale data beats a 500.
+    await ensure_fresh_sources(get_sessionmaker(), source_factory=build_source)
     rows = await svc.list_filaments(
         session,
         material=material,

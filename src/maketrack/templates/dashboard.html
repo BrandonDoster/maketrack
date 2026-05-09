@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard · MakeTrack{% endblock %}
+
+{% block content %}
+<header class="mb-8">
+  <h1 class="text-3xl font-semibold text-white">Dashboard</h1>
+  <p class="mt-1 text-slate-400">Self-hosted 3D printing project tracker.</p>
+</header>
+
+<section class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+  <a href="/filaments" class="group rounded-lg border border-slate-800 bg-slate-900 p-5 hover:border-emerald-700 hover:bg-slate-900/80">
+    <h2 class="text-sm uppercase tracking-wider text-slate-400 group-hover:text-emerald-400">Filaments</h2>
+    <p class="mt-2 text-3xl font-semibold text-white">{{ filament_count }}</p>
+    <p class="mt-1 text-xs text-slate-500">across {{ source_count }} source{{ '' if source_count == 1 else 's' }}</p>
+  </a>
+  <a href="/sources" class="group rounded-lg border border-slate-800 bg-slate-900 p-5 hover:border-emerald-700 hover:bg-slate-900/80">
+    <h2 class="text-sm uppercase tracking-wider text-slate-400 group-hover:text-emerald-400">External sources</h2>
+    <p class="mt-2 text-3xl font-semibold text-white">{{ source_count }}</p>
+    <p class="mt-1 text-xs text-slate-500">configured</p>
+  </a>
+  <div class="rounded-lg border border-slate-800 bg-slate-900 p-5 opacity-60">
+    <h2 class="text-sm uppercase tracking-wider text-slate-400">Projects</h2>
+    <p class="mt-2 text-3xl font-semibold text-slate-500">—</p>
+    <p class="mt-1 text-xs text-slate-500">coming in M6</p>
+  </div>
+</section>
+{% endblock %}
