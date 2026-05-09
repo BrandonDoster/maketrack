@@ -78,9 +78,16 @@ async def test_sources_list_renders(client: AsyncClient, session: AsyncSession) 
     await persist(session, SpoolmanSourceFactory(name="home spoolman"))
     await session.commit()
 
-    resp = await client.get("/sources")
+    resp = await client.get("/settings/sources")
     assert resp.status_code == 200
     assert "home spoolman" in resp.text
+
+
+async def test_old_sources_url_is_gone(client: AsyncClient) -> None:
+    # /sources moved under /settings/sources in M4-followup; the old path
+    # should 404 so callers don't silently miss the migration.
+    resp = await client.get("/sources")
+    assert resp.status_code == 404
 
 
 async def test_static_vendor_files_served(client: AsyncClient) -> None:

@@ -26,10 +26,19 @@ So Claude Code doesn't try to build these:
 - Auto-thumbnail generation from STL geometry (manual upload + 3MF embedded extraction in v1)
 - Printables / Thingiverse metadata enrichment (schema is designed for it; implementation is later)
 - GitHub repo or direct-URL import for model files
-- Printer mods / maintenance schedules
+- Maintenance schedules / part-life tracking
 - Bulk upload with auto-grouping suggestions
 
 Local filament management is intentionally a fallback. Spoolman or other external sources are the preferred path. Don't over-invest in local-only filament features.
+
+## Planned (post-v1, schema lives here so we don't paint into a corner)
+
+These are deferred but the data model should accommodate them so we don't end up doing destructive migrations later.
+
+- **Printer photo + mod list with project link.** A printer has zero or more mods. A mod has a name, optional notes, an optional photo, and an optional FK to a `projects.id` (the project that built/added the mod — useful when you printed your own riser feet). Schema sketch: `printer_mods (id, printer_id NOT NULL FK, name NOT NULL, description, photo_path, source_project_id FK projects, created_at, updated_at)`. Add `printers.photo_path TEXT NULL` for a primary printer photo.
+- **Inventory ↔ printer parts tracking.** A printer is partly an assembly of inventory items (heatset inserts, bolts, board, hotend, etc.). Track which items are currently installed in which printer so a teardown can reclaim them. Schema sketch: `printer_parts (id, printer_id FK CASCADE, inventory_item_id FK RESTRICT, qty NOT NULL DEFAULT 1, installed_at, removed_at NULL, notes)`. "Reclaim" UI bumps `removed_at`, increments `inventory_items.quantity` by `qty`.
+- **Locations for inventory.** Promote the `inventory_items.location` text field to a structured `locations` table (`id, name, kind ('bin'|'shelf'|'drawer'|'other'), parent_id NULL, qr_code NULL`) with `inventory_items.location_id FK NULL`. Settings page lists/edits locations.
+- **QR codes for items and bins.** When the location/item rows have stable URLs, render a QR code that decodes to the item or location detail page. Mobile flow: scan a bin QR, see what's in it; scan an item then a bin to move it; scan a bin while putting away an order to add new items there.
 
 ## Licensing and prior art
 

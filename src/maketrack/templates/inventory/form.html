@@ -4,30 +4,33 @@
 
 {% block content %}
 <header class="mb-6">
-  <a href="/inventory" class="text-sm text-slate-400 hover:text-emerald-400">← Inventory</a>
-  <h1 class="mt-2 text-2xl font-semibold text-white">
+  <a href="/inventory" class="text-sm text-slate-500 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400">← Inventory</a>
+  <h1 class="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">
     {{ 'Edit inventory item' if item else 'New inventory item' }}
   </h1>
 </header>
 
 {% if errors %}
-  <div class="mb-4 rounded border border-rose-700 bg-rose-950/40 px-4 py-3 text-sm text-rose-200">
+  <div class="mb-4 rounded border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-700 dark:bg-rose-950/40 dark:text-rose-200">
     <ul class="list-disc pl-5">{% for err in errors %}<li>{{ err }}</li>{% endfor %}</ul>
   </div>
 {% endif %}
 
+{% set input_classes = "mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white invalid:border-rose-500 invalid:ring-1 invalid:ring-rose-500" %}
+
 <form method="post"
       action="{{ '/inventory/' + item.id|string if item else '/inventory' }}"
-      class="space-y-5 rounded-lg border border-slate-800 bg-slate-900/50 p-6">
+      enctype="multipart/form-data"
+      class="space-y-5 rounded-lg border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900/50">
   <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
     <label class="block sm:col-span-2">
-      <span class="block text-sm font-medium text-slate-300">Name</span>
+      <span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Name</span>
       <input type="text" name="name" required value="{{ (item.name if item else '') or '' }}"
-             class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:border-emerald-500 focus:outline-none">
+             class="{{ input_classes }}">
     </label>
     <label class="block">
-      <span class="block text-sm font-medium text-slate-300">Category</span>
-      <select name="category" class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:border-emerald-500 focus:outline-none">
+      <span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Category</span>
+      <select name="category" class="{{ input_classes }}">
         {% set current = (item.category if item else '') %}
         <option value="" {{ 'selected' if not current }}>—</option>
         {% for c in ['hardware', 'electronic', 'tool', 'other'] %}
@@ -36,64 +39,90 @@
       </select>
     </label>
     <label class="block">
-      <span class="block text-sm font-medium text-slate-300">Quantity</span>
-      <input type="number" name="quantity" min="0"
-             value="{{ item.quantity if item else 0 }}"
-             class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:border-emerald-500 focus:outline-none">
+      <span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Quantity</span>
+      <input type="number" name="quantity" min="0" step="0.01"
+             value="{{ '{:g}'.format(item.quantity) if item else '0' }}"
+             onfocus="this.select()"
+             class="{{ input_classes }}">
+      <span class="text-xs text-slate-500">Decimals OK (e.g. 1.5).</span>
     </label>
     <label class="block">
-      <span class="block text-sm font-medium text-slate-300">Reorder threshold</span>
-      <input type="number" name="reorder_threshold" min="0"
-             value="{{ item.reorder_threshold if item and item.reorder_threshold is not none else '' }}"
-             class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:border-emerald-500 focus:outline-none">
+      <span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Reorder threshold</span>
+      <input type="number" name="reorder_threshold" min="0" step="0.01"
+             value="{{ '{:g}'.format(item.reorder_threshold) if item and item.reorder_threshold is not none else '' }}"
+             onfocus="this.select()"
+             class="{{ input_classes }}">
     </label>
     <label class="block">
-      <span class="block text-sm font-medium text-slate-300">Unit</span>
+      <span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Unit</span>
       <input type="text" name="unit" placeholder="each, m, mm, kg…"
              value="{{ (item.unit if item else '') or '' }}"
-             class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:border-emerald-500 focus:outline-none">
+             class="{{ input_classes }}">
     </label>
     <label class="block">
-      <span class="block text-sm font-medium text-slate-300">Vendor</span>
+      <span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Location</span>
+      <input type="text" name="location" placeholder="Bin A3, Drawer 4…"
+             value="{{ (item.location if item else '') or '' }}"
+             class="{{ input_classes }}">
+    </label>
+    <label class="block">
+      <span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Vendor</span>
       <input type="text" name="vendor"
              value="{{ (item.vendor if item else '') or '' }}"
-             class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:border-emerald-500 focus:outline-none">
+             class="{{ input_classes }}">
     </label>
     <label class="block">
-      <span class="block text-sm font-medium text-slate-300">Vendor SKU</span>
+      <span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Vendor SKU</span>
       <input type="text" name="vendor_sku"
              value="{{ (item.vendor_sku if item else '') or '' }}"
-             class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:border-emerald-500 focus:outline-none">
+             class="{{ input_classes }}">
     </label>
     <label class="block sm:col-span-2">
-      <span class="block text-sm font-medium text-slate-300">Vendor URL</span>
+      <span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Vendor URL</span>
       <input type="url" name="vendor_url"
              value="{{ (item.vendor_url if item else '') or '' }}"
-             class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:border-emerald-500 focus:outline-none">
+             class="{{ input_classes }}">
+    </label>
+
+    <div class="block sm:col-span-2">
+      <span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Photo</span>
+      {% if item and item.photo_path %}
+        <div class="mt-2 flex items-center gap-3">
+          <img src="/media/{{ item.photo_path }}" alt=""
+               class="h-20 w-20 rounded border border-slate-300 object-cover dark:border-slate-700">
+          <label class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+            <input type="checkbox" name="remove_photo" value="true"
+                   class="h-4 w-4 rounded border-slate-300 dark:border-slate-600">
+            Remove
+          </label>
+        </div>
+      {% endif %}
+      <input type="file" name="photo" accept="image/jpeg,image/png,image/webp,image/gif"
+             class="mt-2 block w-full text-sm text-slate-700 file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-slate-200 dark:text-slate-300 dark:file:bg-slate-800 dark:hover:file:bg-slate-700">
+      <span class="mt-1 block text-xs text-slate-500">JPEG, PNG, WebP or GIF · 10 MB max</span>
+    </div>
+
+    <label class="block sm:col-span-2">
+      <span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Description</span>
+      <textarea name="description" rows="2" class="{{ input_classes }}">{{ (item.description if item else '') or '' }}</textarea>
     </label>
     <label class="block sm:col-span-2">
-      <span class="block text-sm font-medium text-slate-300">Description</span>
-      <textarea name="description" rows="2"
-                class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:border-emerald-500 focus:outline-none">{{ (item.description if item else '') or '' }}</textarea>
-    </label>
-    <label class="block sm:col-span-2">
-      <span class="block text-sm font-medium text-slate-300">Notes</span>
-      <textarea name="notes" rows="2"
-                class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:border-emerald-500 focus:outline-none">{{ (item.notes if item else '') or '' }}</textarea>
+      <span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Notes</span>
+      <textarea name="notes" rows="2" class="{{ input_classes }}">{{ (item.notes if item else '') or '' }}</textarea>
     </label>
   </div>
   <div class="flex justify-between">
     <div>
       {% if item %}
         <form method="post" action="/inventory/{{ item.id }}/delete" class="inline">
-          <button class="rounded-md border border-rose-800 px-4 py-2 text-sm text-rose-300 hover:bg-rose-950/50">
+          <button class="rounded-md border border-rose-300 px-4 py-2 text-sm text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950/50">
             Delete
           </button>
         </form>
       {% endif %}
     </div>
     <div class="flex gap-2">
-      <a href="/inventory" class="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800">Cancel</a>
+      <a href="/inventory" class="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">Cancel</a>
       <button type="submit" class="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500">
         Save
       </button>

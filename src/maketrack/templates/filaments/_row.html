@@ -1,12 +1,12 @@
-<tr id="filament-{{ f.id }}" class="hover:bg-slate-900/50">
+<tr id="filament-{{ f.id }}" class="hover:bg-slate-50 dark:hover:bg-slate-900/50">
   <td class="px-4 py-3">
-    <span class="inline-block h-5 w-5 rounded border border-slate-700"
+    <span class="inline-block h-5 w-5 rounded border border-slate-300 dark:border-slate-700"
           style="background-color: {{ f.color_hex or '#1e293b' }}"></span>
   </td>
-  <td class="px-4 py-3 font-medium text-white">{{ f.name or '—' }}</td>
-  <td class="px-4 py-3 text-slate-300">{{ f.material or '—' }}</td>
-  <td class="px-4 py-3 text-slate-400">{{ f.brand or '—' }}</td>
-  <td class="px-4 py-3 text-right tabular-nums text-slate-300">
+  <td class="px-4 py-3 font-medium text-slate-900 dark:text-white">{{ f.name or '—' }}</td>
+  <td class="px-4 py-3 text-slate-700 dark:text-slate-300">{{ f.material or '—' }}</td>
+  <td class="px-4 py-3 text-slate-500 dark:text-slate-400">{{ f.brand or '—' }}</td>
+  <td class="px-4 py-3 text-right tabular-nums text-slate-700 dark:text-slate-300">
     {% if f.remaining_weight_g is not none %}
       {{ '%.0f'|format(f.remaining_weight_g) }}g
       {% if f.total_weight_g %}
@@ -16,21 +16,21 @@
   </td>
   <td class="px-4 py-3">
     {% if f.source == 'local' %}
-      <span class="rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-300">local</span>
+      <span class="rounded bg-slate-200 px-2 py-0.5 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-300">local</span>
     {% else %}
-      <span class="rounded bg-amber-900/40 px-2 py-0.5 text-xs text-amber-300">{{ f.source }}</span>
+      <span class="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">{{ f.source }}</span>
     {% endif %}
   </td>
   <td class="px-4 py-3 text-right">
     {% if f.source == 'local' %}
       <a href="/filaments/{{ f.id }}/edit"
-         class="text-emerald-400 hover:text-emerald-300">Edit</a>
+         class="text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300">Edit</a>
     {% else %}
       {% if f.external_url %}
         <a href="{{ f.external_url }}" target="_blank" rel="noopener"
-           class="text-amber-400 hover:text-amber-300">Open in {{ f.source }} ↗</a>
+           class="text-amber-600 hover:text-amber-500 dark:text-amber-400 dark:hover:text-amber-300">Open in {{ f.source }} ↗</a>
       {% else %}
-        <span class="text-slate-600">read-only</span>
+        <span class="text-slate-400 dark:text-slate-600">read-only</span>
       {% endif %}
     {% endif %}
   </td>

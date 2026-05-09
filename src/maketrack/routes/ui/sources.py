@@ -27,7 +27,7 @@ def _form_payload(form: dict) -> dict:
     return out
 
 
-@router.get("/sources", response_class=HTMLResponse)
+@router.get("/settings/sources", response_class=HTMLResponse)
 async def list_page(request: Request, session: SessionDep) -> HTMLResponse:
     sources = await svc.list_sources(session)
     return templates.TemplateResponse(
@@ -37,7 +37,7 @@ async def list_page(request: Request, session: SessionDep) -> HTMLResponse:
     )
 
 
-@router.get("/sources/new", response_class=HTMLResponse)
+@router.get("/settings/sources/new", response_class=HTMLResponse)
 async def new_form(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
@@ -46,7 +46,7 @@ async def new_form(request: Request) -> HTMLResponse:
     )
 
 
-@router.post("/sources", response_class=HTMLResponse)
+@router.post("/settings/sources", response_class=HTMLResponse)
 async def create(request: Request, session: SessionDep) -> HTMLResponse:
     form = dict(await request.form())
     try:
@@ -60,10 +60,10 @@ async def create(request: Request, session: SessionDep) -> HTMLResponse:
         )
     await svc.create_source(session, payload)
     await session.commit()
-    return RedirectResponse(url="/sources", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url="/settings/sources", status_code=status.HTTP_303_SEE_OTHER)
 
 
-@router.get("/sources/{source_id}/edit", response_class=HTMLResponse)
+@router.get("/settings/sources/{source_id}/edit", response_class=HTMLResponse)
 async def edit_form(source_id: int, request: Request, session: SessionDep) -> HTMLResponse:
     source = await svc.get_source(session, source_id)
     return templates.TemplateResponse(
@@ -73,7 +73,7 @@ async def edit_form(source_id: int, request: Request, session: SessionDep) -> HT
     )
 
 
-@router.post("/sources/{source_id}", response_class=HTMLResponse)
+@router.post("/settings/sources/{source_id}", response_class=HTMLResponse)
 async def update(source_id: int, request: Request, session: SessionDep) -> HTMLResponse:
     form = dict(await request.form())
     payload_data = _form_payload(form)
@@ -95,17 +95,17 @@ async def update(source_id: int, request: Request, session: SessionDep) -> HTMLR
     if was_enabled and row.enabled is False:
         await archive_all_for_source(session, row.type)
     await session.commit()
-    return RedirectResponse(url="/sources", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url="/settings/sources", status_code=status.HTTP_303_SEE_OTHER)
 
 
-@router.post("/sources/{source_id}/delete", response_class=HTMLResponse)
+@router.post("/settings/sources/{source_id}/delete", response_class=HTMLResponse)
 async def delete(source_id: int, session: SessionDep) -> HTMLResponse:
     await svc.delete_source(session, source_id)
     await session.commit()
-    return RedirectResponse(url="/sources", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url="/settings/sources", status_code=status.HTTP_303_SEE_OTHER)
 
 
-@router.post("/sources/{source_id}/sync", response_class=HTMLResponse)
+@router.post("/settings/sources/{source_id}/sync", response_class=HTMLResponse)
 async def manual_sync(source_id: int, request: Request, session: SessionDep) -> HTMLResponse:
     await svc.get_source(session, source_id)
     result = await sync_source(

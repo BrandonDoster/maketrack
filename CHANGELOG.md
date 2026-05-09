@@ -36,3 +36,30 @@ All notable changes to this project will be documented here. Format roughly foll
   `/data` volume is bootstrapped automatically. Verified end-to-end: a
   containerized MakeTrack synced 2 spools from a host Spoolman through
   `host.docker.internal`.
+
+### M4 follow-up (UX feedback round)
+- Spoolman base-URL placeholder defaults to `http://spoolman:8000` (the
+  internal Docker network name), with help text explaining when to use
+  `http://host.docker.internal:7912` for an external Spoolman.
+- Inventory quantity is now `float`, not `int` — track 1.5m of wire,
+  0.25 kg of resin, etc. Schema migration via `batch_alter_table`.
+- New `inventory_items` columns: `location` (text), `photo_path` (text).
+- Inventory form: `step="0.01"` decimal entry, `onfocus` selects the
+  current value so typing replaces it cleanly, `invalid:` Tailwind
+  styling highlights bad input in red while typing.
+- Inventory items now accept a photo upload (JPEG/PNG/WebP/GIF, 10 MB
+  max). New `services/uploads.py` handles streamed save with sha256 +
+  size check. Files saved as `inventory/<uuid><ext>` so MIME detection
+  works on serve.
+- New `/media/{path}` route serves uploaded files with a path-traversal
+  guard. Reusable in M5 for model assets.
+- Sources UI moved under `/settings/sources`; nav renamed "Sources" →
+  "Settings"; new `/settings` overview page.
+- Theme system: light / dark / auto (default) via `maketrack_theme`
+  cookie. Pre-render JS sets the `dark` class on `<html>` to avoid FOUC.
+  All UI templates rethemed with light + dark variants.
+- CLAUDE.md: added a "Planned (post-v1)" section sketching schemas for
+  printer photo, printer mod list with project link, inventory ↔ printer
+  parts tracking with reclaim flow, structured locations, and QR codes
+  for items + bins. Removed "Printer mods / maintenance schedules" from
+  out-of-scope.

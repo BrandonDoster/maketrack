@@ -4,36 +4,41 @@
 
 {% block content %}
 <header class="mb-8">
-  <h1 class="text-3xl font-semibold text-white">Dashboard</h1>
-  <p class="mt-1 text-slate-400">Self-hosted 3D printing project tracker.</p>
+  <h1 class="text-3xl font-semibold text-slate-900 dark:text-white">Dashboard</h1>
+  <p class="mt-1 text-slate-500 dark:text-slate-400">Self-hosted 3D printing project tracker.</p>
 </header>
 
+{% set tile = "group rounded-lg border border-slate-200 bg-white p-5 hover:border-emerald-500 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-emerald-700" %}
+{% set tile_label = "text-sm uppercase tracking-wider text-slate-500 group-hover:text-emerald-600 dark:text-slate-400 dark:group-hover:text-emerald-400" %}
+{% set tile_value = "mt-2 text-3xl font-semibold text-slate-900 dark:text-white" %}
+{% set tile_hint = "mt-1 text-xs text-slate-500" %}
+
 <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-  <a href="/filaments" class="group rounded-lg border border-slate-800 bg-slate-900 p-5 hover:border-emerald-700 hover:bg-slate-900/80">
-    <h2 class="text-sm uppercase tracking-wider text-slate-400 group-hover:text-emerald-400">Filaments</h2>
-    <p class="mt-2 text-3xl font-semibold text-white">{{ filament_count }}</p>
-    <p class="mt-1 text-xs text-slate-500">across {{ source_count }} source{{ '' if source_count == 1 else 's' }}</p>
+  <a href="/filaments" class="{{ tile }}">
+    <h2 class="{{ tile_label }}">Filaments</h2>
+    <p class="{{ tile_value }}">{{ filament_count }}</p>
+    <p class="{{ tile_hint }}">across {{ source_count }} source{{ '' if source_count == 1 else 's' }}</p>
   </a>
-  <a href="/inventory" class="group rounded-lg border border-slate-800 bg-slate-900 p-5 hover:border-emerald-700 hover:bg-slate-900/80">
-    <h2 class="text-sm uppercase tracking-wider text-slate-400 group-hover:text-emerald-400">Inventory</h2>
-    <p class="mt-2 text-3xl font-semibold text-white">{{ inventory_count }}</p>
-    <p class="mt-1 text-xs {% if inventory_low %}text-amber-400{% else %}text-slate-500{% endif %}">
+  <a href="/inventory" class="{{ tile }}">
+    <h2 class="{{ tile_label }}">Inventory</h2>
+    <p class="{{ tile_value }}">{{ inventory_count }}</p>
+    <p class="mt-1 text-xs {% if inventory_low %}text-amber-600 dark:text-amber-400{% else %}text-slate-500{% endif %}">
       {% if inventory_low %}{{ inventory_low }} below reorder threshold{% else %}all stocked{% endif %}
     </p>
   </a>
-  <a href="/printers" class="group rounded-lg border border-slate-800 bg-slate-900 p-5 hover:border-emerald-700 hover:bg-slate-900/80">
-    <h2 class="text-sm uppercase tracking-wider text-slate-400 group-hover:text-emerald-400">Printers</h2>
-    <p class="mt-2 text-3xl font-semibold text-white">{{ printer_count }}</p>
-    <p class="mt-1 text-xs text-slate-500">configured</p>
+  <a href="/printers" class="{{ tile }}">
+    <h2 class="{{ tile_label }}">Printers</h2>
+    <p class="{{ tile_value }}">{{ printer_count }}</p>
+    <p class="{{ tile_hint }}">configured</p>
   </a>
-  <a href="/sources" class="group rounded-lg border border-slate-800 bg-slate-900 p-5 hover:border-emerald-700 hover:bg-slate-900/80">
-    <h2 class="text-sm uppercase tracking-wider text-slate-400 group-hover:text-emerald-400">Sources</h2>
-    <p class="mt-2 text-3xl font-semibold text-white">{{ source_count }}</p>
-    <p class="mt-1 text-xs text-slate-500">external systems</p>
+  <a href="/settings" class="{{ tile }}">
+    <h2 class="{{ tile_label }}">Settings</h2>
+    <p class="{{ tile_value }}">{{ source_count }}</p>
+    <p class="{{ tile_hint }}">source{{ '' if source_count == 1 else 's' }} configured</p>
   </a>
 </section>
 
-<section class="mt-8 rounded-lg border border-dashed border-slate-800 p-6 text-center text-slate-500">
+<section class="mt-8 rounded-lg border border-dashed border-slate-300 p-6 text-center text-slate-500 dark:border-slate-800">
   Projects coming in M6.
 </section>
 {% endblock %}
