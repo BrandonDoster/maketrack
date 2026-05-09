@@ -19,6 +19,9 @@ class Project(Base, TimestampMixin):
     )
     notes: Mapped[str | None] = mapped_column(default=None)
     tags: Mapped[str | None] = mapped_column(default=None)
+    # Two slots: cover (render / before / borrowed) + after (completion shot).
+    cover_photo_path: Mapped[str | None] = mapped_column(default=None)
+    completed_photo_path: Mapped[str | None] = mapped_column(default=None)
     completed_at: Mapped[datetime | None] = mapped_column(default=None)
 
 
@@ -60,11 +63,29 @@ class ProjectItem(Base, TimestampMixin):
     project_id: Mapped[int] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE"),
     )
-    inventory_item_id: Mapped[int] = mapped_column(
+    # Nullable so a BOM row can exist before the user has created the matching
+    # inventory_items row (e.g. "I know I need M3x8 SHCS, I haven't typed it
+    # in yet"). When linked, RESTRICT on inventory deletion still applies.
+    inventory_item_id: Mapped[int | None] = mapped_column(
         ForeignKey("inventory_items.id", ondelete="RESTRICT"),
+        default=None,
     )
-    # Float to match inventory_items.quantity — track "1.5m of XT60 wire" or
-    # "0.25 kg of resin." Migration 0003 promotes the columns.
+    # Used while unlinked (free-text). When the link is set, these stay as
+    # the user-typed values for reference, but display falls through to the
+    # joined InventoryItem.
+    name: Mapped[str | None] = mapped_column(default=None)
+    unit: Mapped[str | None] = mapped_column(default=None)
     qty_required: Mapped[float]
     qty_consumed: Mapped[float] = mapped_column(default=0.0)
     notes: Mapped[str | None] = mapped_column(default=None)
+
+    @property
+    def display_name(self) -> str | None:
+        """Best name available without loading the linked InventoryItem.
+
+        list_project_items() resolves the joined inventory item and overrides
+        this on the response; this attribute exists so that a freshly-created
+        ProjectItem (e.g. the row we just inserted in add_item) has a
+        sensible display value when there's no joined entity yet.
+        """
+        return self.name

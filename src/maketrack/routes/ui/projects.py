@@ -1,6 +1,7 @@
+from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, File, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import ValidationError
 from sqlalchemy import select
@@ -12,6 +13,7 @@ from maketrack.models.filament import Filament
 from maketrack.models.inventory import InventoryItem
 from maketrack.models.printer import Printer
 from maketrack.routes.ui._forms import format_validation_error, strip_empty_strings
+from maketrack.schemas.model import ModelCreate
 from maketrack.schemas.project import (
     PROJECT_STATUSES,
     ProjectCreate,
@@ -20,9 +22,16 @@ from maketrack.schemas.project import (
     ProjectModelLinkCreate,
     ProjectUpdate,
 )
+from maketrack.services import assets as asset_svc
 from maketrack.services import bom as bom_svc
+from maketrack.services import models as model_svc
 from maketrack.services import project_links as link_svc
 from maketrack.services import projects as svc
+from maketrack.services.uploads import (
+    UploadError,
+    delete_upload,
+    save_photo,
+)
 from maketrack.templating import templates
 
 router = APIRouter(tags=["ui-projects"])
@@ -283,9 +292,14 @@ async def remove_filament(project_id: int, link_id: int, session: SessionDep) ->
 async def add_item(project_id: int, request: Request, session: SessionDep) -> HTMLResponse:
     form = await request.form()
     raw_qty = form.get("qty_required") or "0"
+    raw_inv_id = (form.get("inventory_item_id") or "").strip()
+    raw_name = (form.get("name") or "").strip()
+    raw_unit = (form.get("unit") or "").strip()
     try:
         payload = ProjectItemLinkCreate(
-            inventory_item_id=int(form.get("inventory_item_id", "0")),
+            inventory_item_id=int(raw_inv_id) if raw_inv_id else None,
+            name=raw_name or None,
+            unit=raw_unit or None,
             qty_required=float(raw_qty),
             qty_consumed=0.0,
         )
@@ -296,8 +310,23 @@ async def add_item(project_id: int, request: Request, session: SessionDep) -> HT
     try:
         await link_svc.add_item(session, project_id, payload)
         await session.commit()
-    except NotFoundError:
+    except (NotFoundError, ValueError):
         pass
+    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/projects/{project_id}/items/{link_id}/link", response_class=HTMLResponse)
+async def link_item_to_inventory(
+    project_id: int, link_id: int, request: Request, session: SessionDep
+) -> HTMLResponse:
+    form = await request.form()
+    raw = (form.get("inventory_item_id") or "").strip()
+    if raw:
+        try:
+            await link_svc.link_item_to_inventory(session, link_id, int(raw))
+            await session.commit()
+        except (ValueError, NotFoundError):
+            pass
     return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -308,4 +337,104 @@ async def remove_item(project_id: int, link_id: int, session: SessionDep) -> HTM
         await session.commit()
     except NotFoundError:
         pass
+    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+# ── project-side file upload (auto-creates Models, links them) ────────────
+
+
+_MODEL_ASSET_EXTS = frozenset({".stl", ".step", ".stp", ".3mf", ".gcode", ".g", ".gco"})
+
+
+@router.post("/projects/{project_id}/upload-files", response_class=HTMLResponse)
+async def upload_files(
+    project_id: int,
+    session: SessionDep,
+    files: Annotated[list[UploadFile], File()],
+) -> HTMLResponse:
+    """Drop STL/STEP/3MF/gcode files on a project and have them turn into
+    new Models that are auto-linked. Image files are ignored here — they
+    belong to the photo upload flow.
+    """
+    project = await svc.get_project(session, project_id)
+    base_name = project.name
+    for file in files:
+        name = (file.filename or "").strip()
+        if not name:
+            continue
+        ext = Path(name).suffix.lower()
+        if ext not in _MODEL_ASSET_EXTS:
+            continue
+        # New Model named after the filename (without extension); the user
+        # can rename later if they want.
+        model_name = Path(name).stem or base_name
+        model = await model_svc.create_model(
+            session, ModelCreate(name=model_name, source_type="local")
+        )
+        try:
+            await asset_svc.upload_asset(session, model.id, file)
+        except UploadError:
+            # Best-effort: skip the broken file but keep going through the rest.
+            await session.rollback()
+            continue
+        await link_svc.add_model(
+            session,
+            project_id,
+            ProjectModelLinkCreate(model_id=model.id, qty_to_print=1),
+        )
+        await session.commit()
+    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+# ── project photos ────────────────────────────────────────────────────────
+
+
+_PHOTO_KIND_FIELDS = {
+    "cover": "cover_photo_path",
+    "completed": "completed_photo_path",
+}
+
+
+@router.post("/projects/{project_id}/photo/{kind}", response_class=HTMLResponse)
+async def upload_photo(
+    project_id: int,
+    kind: str,
+    session: SessionDep,
+    file: Annotated[UploadFile, File()],
+) -> HTMLResponse:
+    field = _PHOTO_KIND_FIELDS.get(kind)
+    if field is None:
+        return RedirectResponse(
+            url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER
+        )
+    project = await svc.get_project(session, project_id)
+    if not (file.filename or "").strip():
+        return RedirectResponse(
+            url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER
+        )
+    try:
+        new_path, _, _ = await save_photo(file, subdir="projects")
+    except UploadError:
+        return RedirectResponse(
+            url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER
+        )
+    old_path = getattr(project, field)
+    setattr(project, field, new_path)
+    await session.commit()
+    delete_upload(old_path)
+    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/projects/{project_id}/photo/{kind}/delete", response_class=HTMLResponse)
+async def delete_photo(project_id: int, kind: str, session: SessionDep) -> HTMLResponse:
+    field = _PHOTO_KIND_FIELDS.get(kind)
+    if field is None:
+        return RedirectResponse(
+            url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER
+        )
+    project = await svc.get_project(session, project_id)
+    old_path = getattr(project, field)
+    setattr(project, field, None)
+    await session.commit()
+    delete_upload(old_path)
     return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)

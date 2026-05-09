@@ -110,13 +110,24 @@ class ProjectFilamentLinkRead(BaseModel):
 
 
 class ProjectItemLinkCreate(BaseModel):
-    inventory_item_id: int
+    """Either link an existing inventory item, or supply a free-text name.
+
+    The service rejects payloads that have neither, and treats payloads
+    with both as a linked row whose typed name is kept for reference.
+    """
+
+    inventory_item_id: int | None = None
+    name: str | None = None
+    unit: str | None = None
     qty_required: float = Field(ge=0)
     qty_consumed: float = Field(default=0.0, ge=0)
     notes: str | None = None
 
 
 class ProjectItemLinkUpdate(BaseModel):
+    inventory_item_id: int | None = None
+    name: str | None = None
+    unit: str | None = None
     qty_required: float | None = Field(default=None, ge=0)
     qty_consumed: float | None = Field(default=None, ge=0)
     notes: str | None = None
@@ -127,29 +138,38 @@ class ProjectItemLinkRead(BaseModel):
 
     id: int
     project_id: int
-    inventory_item_id: int
+    inventory_item_id: int | None
     qty_required: float
     qty_consumed: float
     notes: str | None
+    name: str | None = None
+    unit: str | None = None
+    # Hydrated from the joined InventoryItem when linked.
     item_name: str | None = None
     item_unit: str | None = None
     item_on_hand: float | None = None
+    # Display name = item_name if linked else name.
+    display_name: str | None = None
 
 
 # ── BOM / shopping list ────────────────────────────────────────────────────
 
 
 class BOMRow(BaseModel):
-    inventory_item_id: int
+    # NULL when the row is an unlinked custom BOM item (still_to_buy is then
+    # the full still_needed because we don't know what's on hand).
+    inventory_item_id: int | None
     name: str
     unit: str | None
     still_needed_for_project: float
-    on_hand: float
+    on_hand: float | None
     still_to_buy: float
+    project_item_id: int
 
 
 class ShoppingListRow(BaseModel):
-    inventory_item_id: int
+    # NULL when the row aggregates an unlinked custom BOM item.
+    inventory_item_id: int | None
     name: str
     unit: str | None
     on_hand: float

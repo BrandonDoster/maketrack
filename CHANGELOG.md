@@ -121,3 +121,28 @@ All notable changes to this project will be documented here. Format roughly foll
   linking, decimal qty_required, BOM rollup (covered / short /
   consumed), shopping list aggregation (sums demand, excludes inactive,
   omits covered items), UI smoke. 108 tests pass total.
+
+### M6 follow-up (UX feedback round)
+- Project-side file upload: drop STL/STEP/3MF/gcode files on a project
+  and each becomes a new Model named after the filename, auto-linked
+  with qty_to_print=1. 3MF embedded thumbnails still extract. Image
+  files on this endpoint are skipped (they belong to the photo flow).
+- Custom (unlinked) BOM items: migration 0004 makes
+  `project_items.inventory_item_id` nullable and adds `name` + `unit`.
+  The detail page has two "Add" forms — pick from inventory or type a
+  free-text item with qty + unit. Per-row "link to…" dropdown on
+  unlinked rows attaches a real inventory item later, preserving the
+  typed name. BOM rollup + shopping list both handle unlinked rows
+  (`on_hand=null`, `still_to_buy=still_needed`).
+- Project photos: two slots (cover + completed) on `projects` via
+  migration 0004. Upload / replace / remove from the detail page; old
+  files are unlinked from disk when replaced or removed.
+- CLAUDE.md "Planned" updated with the slicer-aware filament estimator
+  (presets + 3MF metadata + per-link override) and the standard
+  hardware autocomplete via curated `<datalist>` JSON.
+- Verified end-to-end through Docker: project upload turned two STLs
+  into linked Models; a custom "M3x12 SHCS" BOM row reported
+  `on_hand=null still_to_buy=50`, late-linking to a 20-on-hand
+  inventory item flipped the same row to `on_hand=20 still_to_buy=30`;
+  cover photo round-tripped via `/media/projects/<uuid>.png`; shopping
+  list rendered linked + unlinked rows together. 119 tests pass.

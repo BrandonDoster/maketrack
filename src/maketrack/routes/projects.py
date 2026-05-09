@@ -200,9 +200,12 @@ async def list_items(project_id: int, session: SessionDep) -> list[ProjectItemLi
             qty_required=h.link.qty_required,
             qty_consumed=h.link.qty_consumed,
             notes=h.link.notes,
-            item_name=h.item.name,
-            item_unit=h.item.unit,
-            item_on_hand=h.item.quantity,
+            name=h.link.name,
+            unit=h.link.unit,
+            item_name=h.item.name if h.item else None,
+            item_unit=h.item.unit if h.item else None,
+            item_on_hand=h.item.quantity if h.item else None,
+            display_name=h.display_name,
         )
         for h in rows
     ]
@@ -216,7 +219,12 @@ async def list_items(project_id: int, session: SessionDep) -> list[ProjectItemLi
 async def add_item(
     project_id: int, payload: ProjectItemLinkCreate, session: SessionDep
 ) -> ProjectItemLinkRead:
-    link = await link_svc.add_item(session, project_id, payload)
+    from fastapi import HTTPException
+
+    try:
+        link = await link_svc.add_item(session, project_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     await session.commit()
     return ProjectItemLinkRead.model_validate(link)
 
@@ -229,6 +237,22 @@ async def update_item_link(
     session: SessionDep,
 ) -> ProjectItemLinkRead:
     link = await link_svc.update_item_link(session, link_id, payload)
+    await session.commit()
+    return ProjectItemLinkRead.model_validate(link)
+
+
+@router.post(
+    "/{project_id}/items/{link_id}/link/{inventory_item_id}",
+    response_model=ProjectItemLinkRead,
+)
+async def link_item_to_inventory(
+    project_id: int,
+    link_id: int,
+    inventory_item_id: int,
+    session: SessionDep,
+) -> ProjectItemLinkRead:
+    """Attach an existing inventory_items row to an unlinked custom BOM row."""
+    link = await link_svc.link_item_to_inventory(session, link_id, inventory_item_id)
     await session.commit()
     return ProjectItemLinkRead.model_validate(link)
 

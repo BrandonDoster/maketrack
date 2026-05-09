@@ -41,7 +41,20 @@ class HydratedProjectFilament:
 @dataclass(slots=True)
 class HydratedProjectItem:
     link: ProjectItem
-    item: InventoryItem
+    # NULL for unlinked custom BOM rows.
+    item: InventoryItem | None
+
+    @property
+    def display_name(self) -> str:
+        if self.item is not None and self.item.name:
+            return self.item.name
+        return self.link.name or "(unnamed)"
+
+    @property
+    def display_unit(self) -> str | None:
+        if self.item is not None and self.item.unit:
+            return self.item.unit
+        return self.link.unit
 
 
 # ── models ─────────────────────────────────────────────────────────────────
@@ -188,12 +201,14 @@ async def remove_filament(session: AsyncSession, link_id: int) -> None:
 
 
 async def list_project_items(session: AsyncSession, project_id: int) -> list[HydratedProjectItem]:
+    # Outer join so unlinked BOM rows still come back; sort first by linked
+    # item name, then by typed name, then by id for stability.
     rows = (
         await session.execute(
             select(ProjectItem, InventoryItem)
-            .join(InventoryItem, InventoryItem.id == ProjectItem.inventory_item_id)
+            .outerjoin(InventoryItem, InventoryItem.id == ProjectItem.inventory_item_id)
             .where(ProjectItem.project_id == project_id)
-            .order_by(InventoryItem.name)
+            .order_by(InventoryItem.name.asc().nulls_last(), ProjectItem.name, ProjectItem.id)
         )
     ).all()
     return [HydratedProjectItem(link=link, item=it) for link, it in rows]
@@ -204,11 +219,18 @@ async def add_item(
 ) -> ProjectItem:
     if await session.get(Project, project_id) is None:
         raise NotFoundError("project", project_id)
-    if await session.get(InventoryItem, payload.inventory_item_id) is None:
+    if payload.inventory_item_id is None and not (payload.name and payload.name.strip()):
+        raise ValueError("BOM row needs either an inventory_item_id or a typed name")
+    if (
+        payload.inventory_item_id is not None
+        and await session.get(InventoryItem, payload.inventory_item_id) is None
+    ):
         raise NotFoundError("inventory_item", payload.inventory_item_id)
     link = ProjectItem(
         project_id=project_id,
         inventory_item_id=payload.inventory_item_id,
+        name=payload.name,
+        unit=payload.unit,
         qty_required=payload.qty_required,
         qty_consumed=payload.qty_consumed,
         notes=payload.notes,
@@ -226,6 +248,23 @@ async def update_item_link(
         raise NotFoundError("project_item", link_id)
     for k, v in payload.model_dump(exclude_unset=True).items():
         setattr(link, k, v)
+    await session.flush()
+    return link
+
+
+async def link_item_to_inventory(
+    session: AsyncSession, link_id: int, inventory_item_id: int
+) -> ProjectItem:
+    """Attach an existing inventory_items row to a previously-unlinked BOM
+    row. Keeps the typed name/unit on the link as a record of what the user
+    originally wrote.
+    """
+    link = await session.get(ProjectItem, link_id)
+    if link is None:
+        raise NotFoundError("project_item", link_id)
+    if await session.get(InventoryItem, inventory_item_id) is None:
+        raise NotFoundError("inventory_item", inventory_item_id)
+    link.inventory_item_id = inventory_item_id
     await session.flush()
     return link
 
