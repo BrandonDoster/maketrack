@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# uv
+.uv-cache/
+
+# tooling
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# editor / OS
+.vscode/
+.idea/
+.DS_Store
+
+# runtime data
+/uploads/
+*.sqlite
+*.sqlite3
+maketrack.db
+maketrack.db-journal
+maketrack.db-wal
+maketrack.db-shm
+
+# Spoolman dev container data (kept out of git, mounted via compose)
+/data/
+
+# Tailwind build artifacts
+src/maketrack/static/tailwind.css
+node_modules/
