@@ -3,6 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from maketrack.models.external_source import ExternalSource
 from maketrack.models.filament import LOCAL_SOURCE, Filament
+from maketrack.models.inventory import InventoryItem
+from maketrack.models.printer import Printer
 
 
 class LocalFilamentFactory(factory.Factory):
@@ -38,6 +40,25 @@ class RemoteFilamentFactory(factory.Factory):
     name = factory.Sequence(lambda n: f"Spoolman Spool {n}")
     material = "PETG"
     diameter_mm = 1.75
+
+
+class InventoryItemFactory(factory.Factory):
+    class Meta:
+        model = InventoryItem
+
+    name = factory.Sequence(lambda n: f"M3 Bolt {n}")
+    category = "hardware"
+    quantity = 100
+    unit = "each"
+
+
+class PrinterFactory(factory.Factory):
+    class Meta:
+        model = Printer
+
+    name = factory.Sequence(lambda n: f"Printer {n}")
+    model = "Voron 2.4"
+    access_url = "http://mainsail.local"
 
 
 async def persist(session: AsyncSession, instance):

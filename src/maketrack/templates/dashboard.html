@@ -8,21 +8,32 @@
   <p class="mt-1 text-slate-400">Self-hosted 3D printing project tracker.</p>
 </header>
 
-<section class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+<section class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
   <a href="/filaments" class="group rounded-lg border border-slate-800 bg-slate-900 p-5 hover:border-emerald-700 hover:bg-slate-900/80">
     <h2 class="text-sm uppercase tracking-wider text-slate-400 group-hover:text-emerald-400">Filaments</h2>
     <p class="mt-2 text-3xl font-semibold text-white">{{ filament_count }}</p>
     <p class="mt-1 text-xs text-slate-500">across {{ source_count }} source{{ '' if source_count == 1 else 's' }}</p>
   </a>
-  <a href="/sources" class="group rounded-lg border border-slate-800 bg-slate-900 p-5 hover:border-emerald-700 hover:bg-slate-900/80">
-    <h2 class="text-sm uppercase tracking-wider text-slate-400 group-hover:text-emerald-400">External sources</h2>
-    <p class="mt-2 text-3xl font-semibold text-white">{{ source_count }}</p>
+  <a href="/inventory" class="group rounded-lg border border-slate-800 bg-slate-900 p-5 hover:border-emerald-700 hover:bg-slate-900/80">
+    <h2 class="text-sm uppercase tracking-wider text-slate-400 group-hover:text-emerald-400">Inventory</h2>
+    <p class="mt-2 text-3xl font-semibold text-white">{{ inventory_count }}</p>
+    <p class="mt-1 text-xs {% if inventory_low %}text-amber-400{% else %}text-slate-500{% endif %}">
+      {% if inventory_low %}{{ inventory_low }} below reorder threshold{% else %}all stocked{% endif %}
+    </p>
+  </a>
+  <a href="/printers" class="group rounded-lg border border-slate-800 bg-slate-900 p-5 hover:border-emerald-700 hover:bg-slate-900/80">
+    <h2 class="text-sm uppercase tracking-wider text-slate-400 group-hover:text-emerald-400">Printers</h2>
+    <p class="mt-2 text-3xl font-semibold text-white">{{ printer_count }}</p>
     <p class="mt-1 text-xs text-slate-500">configured</p>
   </a>
-  <div class="rounded-lg border border-slate-800 bg-slate-900 p-5 opacity-60">
-    <h2 class="text-sm uppercase tracking-wider text-slate-400">Projects</h2>
-    <p class="mt-2 text-3xl font-semibold text-slate-500">—</p>
-    <p class="mt-1 text-xs text-slate-500">coming in M6</p>
-  </div>
+  <a href="/sources" class="group rounded-lg border border-slate-800 bg-slate-900 p-5 hover:border-emerald-700 hover:bg-slate-900/80">
+    <h2 class="text-sm uppercase tracking-wider text-slate-400 group-hover:text-emerald-400">Sources</h2>
+    <p class="mt-2 text-3xl font-semibold text-white">{{ source_count }}</p>
+    <p class="mt-1 text-xs text-slate-500">external systems</p>
+  </a>
+</section>
+
+<section class="mt-8 rounded-lg border border-dashed border-slate-800 p-6 text-center text-slate-500">
+  Projects coming in M6.
 </section>
 {% endblock %}

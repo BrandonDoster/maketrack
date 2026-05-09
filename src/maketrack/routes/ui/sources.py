@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from maketrack.db import get_session, get_sessionmaker
+from maketrack.routes.ui._forms import format_validation_error, strip_empty_strings
 from maketrack.schemas.external_source import (
     ExternalSourceCreate,
     ExternalSourceUpdate,
@@ -20,22 +21,10 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
 def _form_payload(form: dict) -> dict:
-    out = {}
-    for k, v in form.items():
-        if isinstance(v, str) and v.strip() == "":
-            continue
-        out[k] = v
-    if "enabled" in form:
-        out["enabled"] = form["enabled"] in ("true", "on", "1")
-    else:
-        out["enabled"] = False
+    out = strip_empty_strings(form)
+    # Checkboxes only appear in the form data when checked.
+    out["enabled"] = form.get("enabled") in ("true", "on", "1")
     return out
-
-
-def _format_error(err: dict) -> str:
-    field = ".".join(str(p) for p in err.get("loc", []))
-    msg = err.get("msg", "invalid")
-    return f"{field}: {msg}" if field else msg
 
 
 @router.get("/sources", response_class=HTMLResponse)
@@ -66,7 +55,7 @@ async def create(request: Request, session: SessionDep) -> HTMLResponse:
         return templates.TemplateResponse(
             request,
             "sources/form.html",
-            {"source": None, "errors": [_format_error(e) for e in exc.errors()]},
+            {"source": None, "errors": [format_validation_error(e) for e in exc.errors()]},
             status_code=status.HTTP_400_BAD_REQUEST,
         )
     await svc.create_source(session, payload)
@@ -97,7 +86,7 @@ async def update(source_id: int, request: Request, session: SessionDep) -> HTMLR
         return templates.TemplateResponse(
             request,
             "sources/form.html",
-            {"source": source, "errors": [_format_error(e) for e in exc.errors()]},
+            {"source": source, "errors": [format_validation_error(e) for e in exc.errors()]},
             status_code=status.HTTP_400_BAD_REQUEST,
         )
     existing = await svc.get_source(session, source_id)

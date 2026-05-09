@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Inventory · MakeTrack{% endblock %}
+
+{% block content %}
+<header class="mb-6 flex items-end justify-between">
+  <div>
+    <h1 class="text-3xl font-semibold text-white">Inventory</h1>
+    <p class="mt-1 text-sm text-slate-400">
+      {{ items|length }} item{{ '' if items|length == 1 else 's' }} · hardware, electronics, anything that isn't filament.
+    </p>
+  </div>
+  <a href="/inventory/new"
+     class="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500">
+    + New item
+  </a>
+</header>
+
+<section class="overflow-hidden rounded-lg border border-slate-800">
+  <table class="w-full divide-y divide-slate-800 text-sm">
+    <thead class="bg-slate-900 text-left text-xs uppercase tracking-wider text-slate-400">
+      <tr>
+        <th class="px-4 py-3">Name</th>
+        <th class="px-4 py-3">Category</th>
+        <th class="px-4 py-3 text-right">Qty</th>
+        <th class="px-4 py-3">Unit</th>
+        <th class="px-4 py-3">Vendor</th>
+        <th class="px-4 py-3"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-slate-800 bg-slate-950">
+      {% for it in items %}
+        <tr class="hover:bg-slate-900/50">
+          <td class="px-4 py-3 font-medium text-white">{{ it.name }}</td>
+          <td class="px-4 py-3 text-slate-400">{{ it.category or '—' }}</td>
+          <td class="px-4 py-3 text-right tabular-nums {% if it.reorder_threshold is not none and it.quantity <= it.reorder_threshold %}text-amber-300{% else %}text-slate-300{% endif %}">
+            {{ it.quantity }}
+            {% if it.reorder_threshold is not none and it.quantity <= it.reorder_threshold %}
+              <span class="ml-1 text-xs">↓ reorder</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-3 text-slate-400">{{ it.unit or '—' }}</td>
+          <td class="px-4 py-3 text-slate-400">
+            {% if it.vendor_url %}
+              <a href="{{ it.vendor_url }}" target="_blank" rel="noopener" class="hover:text-emerald-300">{{ it.vendor or it.vendor_sku or 'link' }} ↗</a>
+            {% else %}
+              {{ it.vendor or '—' }}
+            {% endif %}
+          </td>
+          <td class="px-4 py-3 text-right">
+            <a href="/inventory/{{ it.id }}/edit" class="text-emerald-400 hover:text-emerald-300">Edit</a>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="px-4 py-12 text-center text-slate-500">
+          No inventory items yet.
+        </td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

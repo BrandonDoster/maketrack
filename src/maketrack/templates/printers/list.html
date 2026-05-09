@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Printers · MakeTrack{% endblock %}
+
+{% block content %}
+<header class="mb-6 flex items-end justify-between">
+  <div>
+    <h1 class="text-3xl font-semibold text-white">Printers</h1>
+    <p class="mt-1 text-sm text-slate-400">
+      {{ printers|length }} printer{{ '' if printers|length == 1 else 's' }} · projects link to which one printed them.
+    </p>
+  </div>
+  <a href="/printers/new"
+     class="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500">
+    + New printer
+  </a>
+</header>
+
+<section class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+  {% for p in printers %}
+    <article class="rounded-lg border border-slate-800 bg-slate-900 p-5">
+      <h2 class="text-lg font-semibold text-white">{{ p.name }}</h2>
+      <p class="mt-1 text-sm text-slate-400">{{ p.model or '—' }}</p>
+      {% if p.access_url %}
+        <p class="mt-3"><a href="{{ p.access_url }}" target="_blank" rel="noopener"
+                          class="text-sm text-emerald-400 hover:text-emerald-300">Open ↗</a></p>
+      {% endif %}
+      <p class="mt-4">
+        <a href="/printers/{{ p.id }}/edit" class="text-sm text-slate-300 hover:text-emerald-300">Edit</a>
+      </p>
+    </article>
+  {% else %}
+    <div class="col-span-full rounded-lg border border-dashed border-slate-800 p-12 text-center text-slate-500">
+      No printers yet.
+    </div>
+  {% endfor %}
+</section>
+{% endblock %}

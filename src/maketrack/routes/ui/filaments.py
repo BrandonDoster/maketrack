@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from maketrack.db import get_session, get_sessionmaker
 from maketrack.errors import RemoteFilamentError
+from maketrack.routes.ui._forms import format_validation_error, strip_empty_strings
 from maketrack.schemas.filament import FilamentCreate, FilamentUpdate
 from maketrack.services import external_sources as sources_svc
 from maketrack.services import filaments as svc
@@ -16,17 +17,6 @@ from maketrack.templating import templates
 router = APIRouter(tags=["ui-filaments"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
-
-
-def _form_payload(form: dict) -> dict:
-    """Strip empty-string form fields so Pydantic uses the schema default
-    instead of trying to coerce '' to a number / hex pattern."""
-    out = {}
-    for k, v in form.items():
-        if isinstance(v, str) and v.strip() == "":
-            continue
-        out[k] = v
-    return out
 
 
 @router.get("/filaments", response_class=HTMLResponse)
@@ -54,14 +44,14 @@ async def new_form(request: Request) -> HTMLResponse:
 async def create(request: Request, session: SessionDep) -> HTMLResponse:
     form = dict(await request.form())
     try:
-        payload = FilamentCreate(**_form_payload(form))
+        payload = FilamentCreate(**strip_empty_strings(form))
     except ValidationError as exc:
         return templates.TemplateResponse(
             request,
             "filaments/form.html",
             {
                 "filament": None,
-                "errors": [_format_error(e) for e in exc.errors()],
+                "errors": [format_validation_error(e) for e in exc.errors()],
                 "banner": None,
             },
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -88,7 +78,7 @@ async def edit_form(filament_id: int, request: Request, session: SessionDep) -> 
 async def update(filament_id: int, request: Request, session: SessionDep) -> HTMLResponse:
     form = dict(await request.form())
     try:
-        payload = FilamentUpdate(**_form_payload(form))
+        payload = FilamentUpdate(**strip_empty_strings(form))
     except ValidationError as exc:
         filament = await svc.get_filament(session, filament_id)
         return templates.TemplateResponse(
@@ -96,7 +86,7 @@ async def update(filament_id: int, request: Request, session: SessionDep) -> HTM
             "filaments/form.html",
             {
                 "filament": filament,
-                "errors": [_format_error(e) for e in exc.errors()],
+                "errors": [format_validation_error(e) for e in exc.errors()],
                 "banner": None,
             },
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -137,9 +127,3 @@ async def archive(filament_id: int, request: Request, session: SessionDep) -> HT
         )
     await session.commit()
     return RedirectResponse(url="/filaments", status_code=status.HTTP_303_SEE_OTHER)
-
-
-def _format_error(err: dict) -> str:
-    field = ".".join(str(p) for p in err.get("loc", []))
-    msg = err.get("msg", "invalid")
-    return f"{field}: {msg}" if field else msg

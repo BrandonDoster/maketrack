@@ -24,3 +24,4 @@ All notable changes to this project will be documented here. Format roughly foll
 - `RemoteFilamentError` → 409 + structured body for JSON callers; HTML "Open in [source]" banner partial for UI callers.
 - Disabling a source archives all its filaments; re-enable + sync un-archives any that come back.
 - Tests: spoolman adapter (mocked transport), sync engine semantics (upsert, archive sweep, reappearance, lock skip, fail-leaves-rows), sources CRUD routes, UI smoke. 43 tests total.
+- Inventory + printers (M4): straight CRUD, JSON + HTMX UI for both. Inventory has reorder-threshold tracking; the dashboard surfaces a "below reorder" count. Shared `strip_empty_strings` / `format_validation_error` helpers replaced the per-route copies.
