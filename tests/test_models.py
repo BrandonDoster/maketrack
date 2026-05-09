@@ -22,9 +22,7 @@ async def test_create_model(client: AsyncClient) -> None:
 
 
 async def test_tags_round_trip_via_db(client: AsyncClient, session: AsyncSession) -> None:
-    create = await client.post(
-        "/api/models", json={"name": "Tagged", "tags": ["a", "b", "c"]}
-    )
+    create = await client.post("/api/models", json={"name": "Tagged", "tags": ["a", "b", "c"]})
     model_id = create.json()["id"]
 
     # Re-read directly from the DB to make sure tags persisted as JSON.
@@ -47,9 +45,7 @@ async def test_list_filter_by_tag(client: AsyncClient) -> None:
 
 
 async def test_invalid_source_type_rejected(client: AsyncClient) -> None:
-    resp = await client.post(
-        "/api/models", json={"name": "X", "source_type": "thingyverse"}
-    )
+    resp = await client.post("/api/models", json={"name": "X", "source_type": "thingyverse"})
     assert resp.status_code == 422
 
 
@@ -57,9 +53,7 @@ async def test_update_model(client: AsyncClient) -> None:
     create = await client.post("/api/models", json={"name": "Original"})
     mid = create.json()["id"]
 
-    patch = await client.patch(
-        f"/api/models/{mid}", json={"name": "Renamed", "tags": ["x"]}
-    )
+    patch = await client.patch(f"/api/models/{mid}", json={"name": "Renamed", "tags": ["x"]})
     assert patch.status_code == 200
     body = patch.json()
     assert body["name"] == "Renamed"

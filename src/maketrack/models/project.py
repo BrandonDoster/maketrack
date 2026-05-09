@@ -63,6 +63,8 @@ class ProjectItem(Base, TimestampMixin):
     inventory_item_id: Mapped[int] = mapped_column(
         ForeignKey("inventory_items.id", ondelete="RESTRICT"),
     )
-    qty_required: Mapped[int]
-    qty_consumed: Mapped[int] = mapped_column(default=0)
+    # Float to match inventory_items.quantity — track "1.5m of XT60 wire" or
+    # "0.25 kg of resin." Migration 0003 promotes the columns.
+    qty_required: Mapped[float]
+    qty_consumed: Mapped[float] = mapped_column(default=0.0)
     notes: Mapped[str | None] = mapped_column(default=None)

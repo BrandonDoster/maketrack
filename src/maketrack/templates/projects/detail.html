@@ -1,0 +1,244 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.name }} · MakeTrack{% endblock %}
+
+{% set status_chip = {
+  'planning': 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300',
+  'printing': 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+  'done': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
+  'archived': 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-400',
+  'abandoned': 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300',
+} %}
+
+{% set ic = "mt-1 rounded border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white invalid:border-rose-500" %}
+
+{% block content %}
+<header class="mb-6">
+  <a href="/projects" class="text-sm text-slate-500 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400">← Projects</a>
+  <div class="mt-2 flex items-start justify-between gap-4">
+    <div class="min-w-0 flex-1">
+      <div class="flex items-center gap-3">
+        <h1 class="truncate text-3xl font-semibold text-slate-900 dark:text-white">{{ project.name }}</h1>
+        <span class="rounded px-2 py-0.5 text-xs {{ status_chip[project.status] }}">{{ project.status }}</span>
+      </div>
+      {% if printer %}
+        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Printer: <a href="/printers/{{ printer.id }}/edit" class="text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300">{{ printer.name }}</a>
+        </p>
+      {% endif %}
+      {% if tags %}
+        <div class="mt-2 flex flex-wrap gap-1">
+          {% for tag in tags %}
+            <span class="rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">{{ tag }}</span>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+    <a href="/projects/{{ project.id }}/edit"
+       class="shrink-0 rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+      Edit
+    </a>
+  </div>
+</header>
+
+{# ── status quick-action bar ─────────────────────────────────────────── #}
+<form method="post" action="/projects/{{ project.id }}/status"
+      class="mb-6 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-3 text-sm dark:border-slate-800 dark:bg-slate-900">
+  <span class="text-slate-500 dark:text-slate-400">Status →</span>
+  {% for s in statuses %}
+    <button name="status" value="{{ s }}"
+            class="rounded px-3 py-1 text-xs {{ 'ring-2 ring-emerald-500 ' if project.status == s }}{{ status_chip[s] }}">
+      {{ s }}
+    </button>
+  {% endfor %}
+</form>
+
+{# ── description / notes ────────────────────────────────────────────── #}
+{% if project.description or project.notes %}
+  <section class="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+    {% if project.description %}
+      <div class="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500">Description</h2>
+        <p class="mt-2 whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300">{{ project.description }}</p>
+      </div>
+    {% endif %}
+    {% if project.notes %}
+      <div class="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500">Notes</h2>
+        <p class="mt-2 whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300">{{ project.notes }}</p>
+      </div>
+    {% endif %}
+  </section>
+{% endif %}
+
+<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+
+{# ── models section ─────────────────────────────────────────────────── #}
+<section class="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+  <h2 class="mb-3 text-base font-semibold text-slate-900 dark:text-white">Models ({{ project_models|length }})</h2>
+
+  <ul class="divide-y divide-slate-200 text-sm dark:divide-slate-800">
+    {% for h in project_models %}
+      <li class="flex items-center gap-3 py-2.5">
+        <div class="h-12 w-12 shrink-0 rounded bg-slate-100 dark:bg-slate-950">
+          {% if h.thumbnail_path %}
+            <img src="/media/{{ h.thumbnail_path }}" alt="" class="h-full w-full rounded object-cover">
+          {% endif %}
+        </div>
+        <div class="min-w-0 flex-1">
+          <a href="/models/{{ h.model.id }}" class="block truncate font-medium text-slate-900 hover:text-emerald-600 dark:text-white dark:hover:text-emerald-300">{{ h.model.name }}</a>
+          <p class="text-xs text-slate-500">qty {{ h.link.qty_to_print }}{% if h.link.status %} · {{ h.link.status }}{% endif %}</p>
+        </div>
+        <form method="post" action="/projects/{{ project.id }}/models/{{ h.model.id }}/delete">
+          <button class="text-xs text-rose-500 hover:text-rose-400">remove</button>
+        </form>
+      </li>
+    {% else %}
+      <li class="py-3 text-center text-xs text-slate-500">No models linked yet.</li>
+    {% endfor %}
+  </ul>
+
+  {% if available_models %}
+    <form method="post" action="/projects/{{ project.id }}/models"
+          class="mt-3 flex flex-wrap items-end gap-2 border-t border-slate-200 pt-3 dark:border-slate-800">
+      <label class="flex-1">
+        <span class="text-xs text-slate-500">Add model</span>
+        <select name="model_id" class="{{ ic }} block w-full">
+          {% for m in available_models %}
+            <option value="{{ m.id }}">{{ m.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="w-20">
+        <span class="text-xs text-slate-500">Qty</span>
+        <input type="number" name="qty_to_print" value="1" min="1" onfocus="this.select()"
+               class="{{ ic }} block w-full">
+      </label>
+      <button class="rounded-md bg-emerald-600 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-500">Add</button>
+    </form>
+  {% endif %}
+</section>
+
+{# ── filaments section ──────────────────────────────────────────────── #}
+<section class="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+  <h2 class="mb-3 text-base font-semibold text-slate-900 dark:text-white">Filaments ({{ project_filaments|length }})</h2>
+
+  <ul class="divide-y divide-slate-200 text-sm dark:divide-slate-800">
+    {% for h in project_filaments %}
+      <li class="flex items-center gap-3 py-2.5">
+        <span class="inline-block h-5 w-5 shrink-0 rounded border border-slate-300 dark:border-slate-700"
+              style="background-color: {{ h.filament.color_hex or '#1e293b' }}"></span>
+        <div class="min-w-0 flex-1">
+          <p class="truncate font-medium text-slate-900 dark:text-white">{{ h.filament.name or 'Unnamed' }}{% if h.filament.material %} <span class="text-xs text-slate-500">· {{ h.filament.material }}</span>{% endif %}</p>
+          <p class="text-xs text-slate-500">
+            {% if h.link.est_weight_g %}est {{ '%.0f'|format(h.link.est_weight_g) }}g{% endif %}
+            {% if h.link.actual_weight_g %} · used {{ '%.0f'|format(h.link.actual_weight_g) }}g{% endif %}
+            {% if h.link.role %} · {{ h.link.role }}{% endif %}
+            {% if h.filament.remaining_weight_g %} · remaining {{ '%.0f'|format(h.filament.remaining_weight_g) }}g{% endif %}
+            {% if h.filament.source != 'local' %} · <span class="text-amber-600 dark:text-amber-300">{{ h.filament.source }}</span>{% endif %}
+          </p>
+        </div>
+        <form method="post" action="/projects/{{ project.id }}/filaments/{{ h.link.id }}/delete">
+          <button class="text-xs text-rose-500 hover:text-rose-400">remove</button>
+        </form>
+      </li>
+    {% else %}
+      <li class="py-3 text-center text-xs text-slate-500">No filaments linked yet.</li>
+    {% endfor %}
+  </ul>
+
+  {% if available_filaments %}
+    <form method="post" action="/projects/{{ project.id }}/filaments"
+          class="mt-3 grid grid-cols-1 gap-2 border-t border-slate-200 pt-3 dark:border-slate-800 sm:grid-cols-3">
+      <label class="block sm:col-span-1">
+        <span class="text-xs text-slate-500">Filament</span>
+        <select name="filament_id" class="{{ ic }} block w-full">
+          {% for f in available_filaments %}
+            <option value="{{ f.id }}">{{ f.name or 'Unnamed' }}{% if f.material %} · {{ f.material }}{% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="block">
+        <span class="text-xs text-slate-500">Est weight (g)</span>
+        <input type="number" step="0.1" min="0" name="est_weight_g" onfocus="this.select()" class="{{ ic }} block w-full">
+      </label>
+      <label class="block">
+        <span class="text-xs text-slate-500">Role</span>
+        <input type="text" name="role" placeholder="extruder_0, supports…" class="{{ ic }} block w-full">
+      </label>
+      <button class="rounded-md bg-emerald-600 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-500 sm:col-span-3">Add filament</button>
+    </form>
+  {% endif %}
+</section>
+
+{# ── inventory items / BOM rollup ───────────────────────────────────── #}
+<section class="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900 lg:col-span-2">
+  <h2 class="mb-3 text-base font-semibold text-slate-900 dark:text-white">Inventory / BOM ({{ project_items|length }})</h2>
+
+  {% if bom %}
+    <div class="mb-4 overflow-hidden rounded border border-slate-200 dark:border-slate-800">
+      <table class="w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
+        <thead class="bg-slate-100 text-left text-xs uppercase tracking-wider text-slate-500 dark:bg-slate-950 dark:text-slate-400">
+          <tr>
+            <th class="px-3 py-2">Item</th>
+            <th class="px-3 py-2 text-right">Still needed</th>
+            <th class="px-3 py-2 text-right">On hand</th>
+            <th class="px-3 py-2 text-right">Still to buy</th>
+            <th class="px-3 py-2"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-200 dark:divide-slate-800">
+          {% for h in project_items %}
+            {% set b = bom | selectattr('inventory_item_id', 'equalto', h.item.id) | first %}
+            <tr class="{{ 'bg-amber-50 dark:bg-amber-950/20' if b and b.still_to_buy > 0 }}">
+              <td class="px-3 py-2">
+                <a href="/inventory/{{ h.item.id }}/edit" class="font-medium text-slate-900 hover:text-emerald-600 dark:text-white dark:hover:text-emerald-300">{{ h.item.name }}</a>
+                <span class="text-xs text-slate-500">{% if h.item.unit %}({{ h.item.unit }}){% endif %}</span>
+                {% if h.link.notes %}<p class="text-xs text-slate-500">{{ h.link.notes }}</p>{% endif %}
+              </td>
+              <td class="px-3 py-2 text-right tabular-nums">
+                {{ '{:g}'.format(b.still_needed_for_project if b else 0) }}
+                <span class="text-xs text-slate-500">/ {{ '{:g}'.format(h.link.qty_required) }}</span>
+              </td>
+              <td class="px-3 py-2 text-right tabular-nums">{{ '{:g}'.format(h.item.quantity) }}</td>
+              <td class="px-3 py-2 text-right tabular-nums {% if b and b.still_to_buy > 0 %}text-amber-700 dark:text-amber-300{% else %}text-emerald-600 dark:text-emerald-400{% endif %}">
+                {% if b %}{{ '{:g}'.format(b.still_to_buy) }}{% else %}—{% endif %}
+              </td>
+              <td class="px-3 py-2 text-right">
+                <form method="post" action="/projects/{{ project.id }}/items/{{ h.link.id }}/delete">
+                  <button class="text-xs text-rose-500 hover:text-rose-400">remove</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="mb-4 py-3 text-center text-xs text-slate-500">No BOM items linked yet.</p>
+  {% endif %}
+
+  {% if available_items %}
+    <form method="post" action="/projects/{{ project.id }}/items"
+          class="grid grid-cols-1 gap-2 border-t border-slate-200 pt-3 dark:border-slate-800 sm:grid-cols-3">
+      <label class="block sm:col-span-2">
+        <span class="text-xs text-slate-500">Inventory item</span>
+        <select name="inventory_item_id" class="{{ ic }} block w-full">
+          {% for it in available_items %}
+            <option value="{{ it.id }}">{{ it.name }}{% if it.unit %} · {{ it.unit }}{% endif %} (on hand {{ '{:g}'.format(it.quantity) }})</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="block">
+        <span class="text-xs text-slate-500">Qty required</span>
+        <input type="number" step="0.01" min="0" name="qty_required" required value="1" onfocus="this.select()" class="{{ ic }} block w-full">
+      </label>
+      <button class="rounded-md bg-emerald-600 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-500 sm:col-span-3">Add to BOM</button>
+    </form>
+  {% else %}
+    <p class="text-xs text-slate-500">Define inventory items first to add them to the BOM.</p>
+  {% endif %}
+</section>
+
+</div>
+{% endblock %}

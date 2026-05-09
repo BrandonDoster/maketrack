@@ -21,11 +21,14 @@ from maketrack.routes.inventory import router as api_inventory_router
 from maketrack.routes.media import router as media_router
 from maketrack.routes.models import router as api_models_router
 from maketrack.routes.printers import router as api_printers_router
+from maketrack.routes.projects import router as api_projects_router
+from maketrack.routes.shopping import router as api_shopping_router
 from maketrack.routes.ui.dashboard import router as ui_dashboard_router
 from maketrack.routes.ui.filaments import router as ui_filaments_router
 from maketrack.routes.ui.inventory import router as ui_inventory_router
 from maketrack.routes.ui.models import router as ui_models_router
 from maketrack.routes.ui.printers import router as ui_printers_router
+from maketrack.routes.ui.projects import router as ui_projects_router
 from maketrack.routes.ui.settings import router as ui_settings_router
 from maketrack.routes.ui.sources import router as ui_sources_router
 from maketrack.sync import SyncScheduler, build_source
@@ -123,6 +126,8 @@ def create_app() -> FastAPI:
     app.include_router(api_printers_router)
     app.include_router(api_models_router)
     app.include_router(api_assets_router)
+    app.include_router(api_projects_router)
+    app.include_router(api_shopping_router)
     app.include_router(media_router)
     app.include_router(ui_dashboard_router)
     app.include_router(ui_filaments_router)
@@ -131,6 +136,7 @@ def create_app() -> FastAPI:
     app.include_router(ui_inventory_router)
     app.include_router(ui_printers_router)
     app.include_router(ui_models_router)
+    app.include_router(ui_projects_router)
 
     return app
 

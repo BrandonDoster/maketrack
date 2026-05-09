@@ -10,6 +10,9 @@ from maketrack.models.external_source import ExternalSource
 from maketrack.models.filament import Filament
 from maketrack.models.inventory import InventoryItem
 from maketrack.models.printer import Printer
+from maketrack.models.project import Project
+from maketrack.schemas.project import ACTIVE_STATUSES
+from maketrack.services import bom as bom_svc
 from maketrack.templating import templates
 
 router = APIRouter(tags=["ui"])
@@ -39,6 +42,12 @@ async def dashboard(request: Request, session: SessionDep) -> HTMLResponse:
         )
     ).scalar_one()
     printer_count = (await session.execute(select(func.count()).select_from(Printer))).scalar_one()
+    active_project_count = (
+        await session.execute(
+            select(func.count()).select_from(Project).where(Project.status.in_(ACTIVE_STATUSES))
+        )
+    ).scalar_one()
+    shopping_list = await bom_svc.shopping_list(session)
     return templates.TemplateResponse(
         request,
         "dashboard.html",
@@ -48,5 +57,7 @@ async def dashboard(request: Request, session: SessionDep) -> HTMLResponse:
             "inventory_count": inventory_count,
             "inventory_low": inventory_low,
             "printer_count": printer_count,
+            "active_project_count": active_project_count,
+            "shopping_list": shopping_list,
         },
     )

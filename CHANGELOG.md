@@ -90,3 +90,34 @@ All notable changes to this project will be documented here. Format roughly foll
   thumbnail, malformed zip), `asset_type_from_filename`, STL/3MF/image
   upload flows, set-thumbnail validation, Content-Disposition download,
   cascade-delete with thumbnail SET NULL. 89 tests pass total.
+
+### M6 — projects
+- Projects entity: schemas, service, JSON CRUD (`/api/projects`), HTMX
+  UI (list with status filter chips, detail, edit, delete-cascade).
+  Tags stored as JSON-as-text (same pattern as models).
+- Status workflow: `planning → printing → done | archived | abandoned`.
+  Status quick-action bar on the detail page; transitioning to `done`
+  auto-stamps `completed_at`, transitioning back clears it.
+- Project ↔ model links (`project_models`): qty_to_print + per-link
+  status + notes. Idempotent re-link upserts on the composite PK so
+  the UI's "add model" form is safe to repeat.
+- Project ↔ filament links (`project_filaments`): est/actual weight,
+  role (`extruder_0`, `supports`, etc.). Hydrated read endpoints expose
+  filament name/color/source so the UI doesn't N+1.
+- Project ↔ inventory links (`project_items`): qty_required +
+  qty_consumed. Migration 0003 promotes both columns to `REAL` so
+  fractional quantities match the M4-followup inventory schema.
+- BOM rollup (`GET /api/projects/{id}/bom`) per CLAUDE.md formula:
+  `still_needed = qty_required - qty_consumed`,
+  `still_to_buy = max(0, still_needed - on_hand)`. Detail page table
+  highlights "still to buy > 0" rows in amber.
+- Cross-project shopping list (`GET /api/shopping-list`): aggregates
+  demand across `status in (planning, printing)` projects, subtracts
+  on-hand once per item, lists the project IDs needing it. Surfaced as
+  a section on the dashboard.
+- Dashboard "Projects coming in M6" placeholder replaced by an active
+  project tile + the live shopping list.
+- Tests: project CRUD + status auto-stamp/clear, idempotent model
+  linking, decimal qty_required, BOM rollup (covered / short /
+  consumed), shopping list aggregation (sums demand, excludes inactive,
+  omits covered items), UI smoke. 108 tests pass total.

@@ -14,6 +14,11 @@
 {% set tile_hint = "mt-1 text-xs text-slate-500" %}
 
 <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+  <a href="/projects" class="{{ tile }}">
+    <h2 class="{{ tile_label }}">Projects</h2>
+    <p class="{{ tile_value }}">{{ active_project_count }}</p>
+    <p class="{{ tile_hint }}">active (planning + printing)</p>
+  </a>
   <a href="/filaments" class="{{ tile }}">
     <h2 class="{{ tile_label }}">Filaments</h2>
     <p class="{{ tile_value }}">{{ filament_count }}</p>
@@ -31,14 +36,50 @@
     <p class="{{ tile_value }}">{{ printer_count }}</p>
     <p class="{{ tile_hint }}">configured</p>
   </a>
-  <a href="/settings" class="{{ tile }}">
-    <h2 class="{{ tile_label }}">Settings</h2>
-    <p class="{{ tile_value }}">{{ source_count }}</p>
-    <p class="{{ tile_hint }}">source{{ '' if source_count == 1 else 's' }} configured</p>
-  </a>
 </section>
 
-<section class="mt-8 rounded-lg border border-dashed border-slate-300 p-6 text-center text-slate-500 dark:border-slate-800">
-  Projects coming in M6.
+<section class="mt-8 rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+  <header class="mb-3 flex items-end justify-between">
+    <h2 class="text-base font-semibold text-slate-900 dark:text-white">Shopping list</h2>
+    <p class="text-xs text-slate-500">aggregated across active projects</p>
+  </header>
+  {% if shopping_list %}
+    <div class="overflow-hidden rounded border border-slate-200 dark:border-slate-800">
+      <table class="w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
+        <thead class="bg-slate-100 text-left text-xs uppercase tracking-wider text-slate-500 dark:bg-slate-950 dark:text-slate-400">
+          <tr>
+            <th class="px-3 py-2">Item</th>
+            <th class="px-3 py-2 text-right">On hand</th>
+            <th class="px-3 py-2 text-right">Still to buy</th>
+            <th class="px-3 py-2">For projects</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-200 dark:divide-slate-800">
+          {% for row in shopping_list %}
+            <tr>
+              <td class="px-3 py-2">
+                <a href="/inventory/{{ row.inventory_item_id }}/edit"
+                   class="font-medium text-slate-900 hover:text-emerald-600 dark:text-white dark:hover:text-emerald-300">{{ row.name }}</a>
+                {% if row.unit %}<span class="text-xs text-slate-500">({{ row.unit }})</span>{% endif %}
+              </td>
+              <td class="px-3 py-2 text-right tabular-nums">{{ '{:g}'.format(row.on_hand) }}</td>
+              <td class="px-3 py-2 text-right tabular-nums text-amber-700 dark:text-amber-300">
+                {{ '{:g}'.format(row.still_to_buy) }}
+              </td>
+              <td class="px-3 py-2 text-xs text-slate-500">
+                {% for pid in row.project_ids %}
+                  <a href="/projects/{{ pid }}" class="hover:text-emerald-600 dark:hover:text-emerald-300">#{{ pid }}</a>{% if not loop.last %}, {% endif %}
+                {% endfor %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="py-8 text-center text-sm text-slate-500">
+      Nothing to buy. Either no active projects need anything, or your inventory has it all covered.
+    </p>
+  {% endif %}
 </section>
 {% endblock %}
