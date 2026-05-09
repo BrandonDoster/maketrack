@@ -14,14 +14,17 @@ from maketrack.db import get_engine, get_sessionmaker
 from maketrack.errors import NotFoundError, RemoteFilamentError
 from maketrack.logging import configure_logging
 from maketrack.migrations import upgrade_to_head
+from maketrack.routes.assets import router as api_assets_router
 from maketrack.routes.external_sources import router as api_sources_router
 from maketrack.routes.filaments import router as api_filaments_router
 from maketrack.routes.inventory import router as api_inventory_router
 from maketrack.routes.media import router as media_router
+from maketrack.routes.models import router as api_models_router
 from maketrack.routes.printers import router as api_printers_router
 from maketrack.routes.ui.dashboard import router as ui_dashboard_router
 from maketrack.routes.ui.filaments import router as ui_filaments_router
 from maketrack.routes.ui.inventory import router as ui_inventory_router
+from maketrack.routes.ui.models import router as ui_models_router
 from maketrack.routes.ui.printers import router as ui_printers_router
 from maketrack.routes.ui.settings import router as ui_settings_router
 from maketrack.routes.ui.sources import router as ui_sources_router
@@ -118,6 +121,8 @@ def create_app() -> FastAPI:
     app.include_router(api_sources_router)
     app.include_router(api_inventory_router)
     app.include_router(api_printers_router)
+    app.include_router(api_models_router)
+    app.include_router(api_assets_router)
     app.include_router(media_router)
     app.include_router(ui_dashboard_router)
     app.include_router(ui_filaments_router)
@@ -125,6 +130,7 @@ def create_app() -> FastAPI:
     app.include_router(ui_sources_router)
     app.include_router(ui_inventory_router)
     app.include_router(ui_printers_router)
+    app.include_router(ui_models_router)
 
     return app
 

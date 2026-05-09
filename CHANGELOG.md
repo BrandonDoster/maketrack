@@ -63,3 +63,30 @@ All notable changes to this project will be documented here. Format roughly foll
   parts tracking with reclaim flow, structured locations, and QR codes
   for items + bins. Removed "Printer mods / maintenance schedules" from
   out-of-scope.
+
+### M5 — models + assets
+- Models entity: schemas, service, JSON CRUD (`/api/models`), HTMX UI
+  (list grid with thumbnails + format badges, detail page, edit form,
+  delete with cascade). Tags stored as JSON-as-text per spec.
+- Multi-file asset upload (`POST /api/models/{id}/assets` and the UI
+  drop-target on the detail page). Accepts STL, STEP/STP, 3MF, gcode,
+  and image types; `asset_type` inferred from file extension. 200 MB
+  ceiling per file.
+- 3MF embedded thumbnail extraction: on `.3mf` upload, the zip is
+  scanned for `Metadata/plate_1.png` / `thumbnail.png` / fallback PNGs
+  under `Metadata/`. The thumbnail is saved as a sibling asset
+  (`generated=True`); if the model has no `thumbnail_asset_id` set yet,
+  it's wired up automatically.
+- "Set as thumbnail" UI on any image asset; uploading a fresh image
+  also auto-sets it when no thumbnail exists.
+- `GET /assets/{id}/download` serves with `Content-Disposition`
+  carrying the original filename.
+- STL viewer on the model detail page: vendored three.js r170 +
+  STLLoader + OrbitControls under `static/vendor/three/`; the importmap
+  resolves `three` and `three/addons/` so the unmodified addon files
+  load directly. Lazy-loaded via `<script type="module">` only when an
+  STL asset is present.
+- Tests: 3MF thumbnail extraction (known path, fallback scan, missing
+  thumbnail, malformed zip), `asset_type_from_filename`, STL/3MF/image
+  upload flows, set-thumbnail validation, Content-Disposition download,
+  cascade-delete with thumbnail SET NULL. 89 tests pass total.
