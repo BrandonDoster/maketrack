@@ -14,8 +14,10 @@ WORKDIR /build
 
 COPY pyproject.toml uv.lock ./
 
-# Export a plain requirements.txt for the slim final image (no uv at runtime).
-RUN uv export --no-dev --frozen --format requirements-txt -o requirements.txt
+# Export a hashed requirements.txt for the slim final image (no uv at runtime).
+# --no-emit-project keeps the editable project line out of the file; the final
+# stage pip-installs the project itself with --no-deps from the copied source.
+RUN uv export --no-dev --frozen --no-emit-project --format requirements-txt -o requirements.txt
 
 # Compile Tailwind. Standalone CLI keeps Node out of the build entirely.
 ARG TAILWIND_VERSION=v3.4.16
@@ -62,7 +64,7 @@ COPY --from=build /build/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY --from=build /build/src ./src
-COPY pyproject.toml ./pyproject.toml
+COPY pyproject.toml README.md ./
 RUN pip install --no-cache-dir --no-deps .
 
 RUN mkdir -p /data /uploads && chown -R maketrack:maketrack /app /data /uploads

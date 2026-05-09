@@ -13,6 +13,7 @@ from maketrack.config import get_settings
 from maketrack.db import get_engine, get_sessionmaker
 from maketrack.errors import NotFoundError, RemoteFilamentError
 from maketrack.logging import configure_logging
+from maketrack.migrations import upgrade_to_head
 from maketrack.routes.external_sources import router as api_sources_router
 from maketrack.routes.filaments import router as api_filaments_router
 from maketrack.routes.inventory import router as api_inventory_router
@@ -38,6 +39,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         bind_host=settings.bind_host,
         bind_port=settings.bind_port,
     )
+    try:
+        await upgrade_to_head()
+        log.info("maketrack.migrations_applied")
+    except Exception as exc:
+        log.error("maketrack.migrations_failed", error=str(exc))
+        raise
     scheduler = SyncScheduler(get_sessionmaker(), source_factory=build_source)
     scheduler.start()
     app.state.scheduler = scheduler

@@ -25,3 +25,14 @@ All notable changes to this project will be documented here. Format roughly foll
 - Disabling a source archives all its filaments; re-enable + sync un-archives any that come back.
 - Tests: spoolman adapter (mocked transport), sync engine semantics (upsert, archive sweep, reappearance, lock skip, fail-leaves-rows), sources CRUD routes, UI smoke. 43 tests total.
 - Inventory + printers (M4): straight CRUD, JSON + HTMX UI for both. Inventory has reorder-threshold tracking; the dashboard surfaces a "below reorder" count. Shared `strip_empty_strings` / `format_validation_error` helpers replaced the per-route copies.
+
+### Fixed
+- Docker build: `uv export` was emitting both `--hashes` and the project's
+  editable line, which pip refuses to mix. Pass `--no-emit-project` and
+  install the project separately with `--no-deps`. Also copy `README.md`
+  into the final stage (hatchling validates it during the project install).
+- Container first-boot 500s: alembic migrations are now applied in the
+  FastAPI lifespan via a worker-thread `command.upgrade(...)`, so a fresh
+  `/data` volume is bootstrapped automatically. Verified end-to-end: a
+  containerized MakeTrack synced 2 spools from a host Spoolman through
+  `host.docker.internal`.
