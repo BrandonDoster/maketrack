@@ -179,3 +179,31 @@ All notable changes to this project will be documented here. Format roughly foll
 - Verified end-to-end through Docker: editing a project with a cleared
   description via the form persisted `description=null`; the edit form
   contains zero instances of `name="notes"`. 129 tests pass.
+
+### M6 polish round 2 (third feedback round)
+- BOM edits no longer full-page-refresh. Extracted `_bom_section.html`
+  partial; qty/add/link/delete UI routes detect `HX-Request` and return
+  the partial for HTMX swaps. The user's scroll position survives.
+- New BOM rows are entered inline at the bottom of the table — type
+  name, tab to required, tab to consumed, tab to the link select,
+  blur-out commits via HTMX. The empty entry row reappears at the
+  bottom and auto-focuses for the next entry. Replaces the two
+  separate "Add from inventory" / "Add custom item" forms below the
+  table.
+- `qty_to_print` on project_models is now an inline number input,
+  HTMX-swap into `_models_section.html`. New `POST
+  /projects/{id}/models/{model_id}/qty` route updates it.
+- Hidden the browser spin buttons on `<input type="number">` via
+  global CSS — typing is faster than clicking the carets and they ate
+  space in tight cells.
+- Photos restructured: detail page header now shows a small Alpine
+  tabbed thumbnail (Cover | After) next to the project name; clicking
+  the photo opens a lightbox overlay. Upload / replace / remove forms
+  moved to the project edit page (the detail page just consumes the
+  photos visually).
+- Verified end-to-end through Docker: HTMX qty edit returned the
+  `#bom-section` partial; new custom BOM row entry persisted
+  ("Heatset M3", req 12); model qty_to_print updated to 7; detail
+  page has the tabbed-thumbnail + lightbox markup and zero upload
+  forms; edit page has both photo upload forms and zero notes
+  textarea. 137 tests pass.

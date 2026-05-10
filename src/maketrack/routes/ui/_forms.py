@@ -25,3 +25,13 @@ def format_validation_error(err: dict) -> str:
     field = ".".join(str(p) for p in err.get("loc", []))
     msg = err.get("msg", "invalid")
     return f"{field}: {msg}" if field else msg
+
+
+def is_htmx(request) -> bool:
+    """True iff the request came from an HTMX swap.
+
+    HTMX sets the HX-Request: true header on every AJAX swap. We use this
+    to decide whether to return a partial (HTMX) or do a full redirect
+    (regular form post fallback).
+    """
+    return request.headers.get("hx-request", "").lower() == "true"

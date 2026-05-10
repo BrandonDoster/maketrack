@@ -356,9 +356,7 @@ async def test_edit_form_clears_description(client: AsyncClient) -> None:
 async def test_edit_form_clears_notes_via_inline_path(client: AsyncClient) -> None:
     """The dedicated /notes endpoint already clears correctly, but make
     sure both POST paths agree (regression-flag for future helper edits)."""
-    project = await client.post(
-        "/api/projects", json={"name": "P", "notes": "old"}
-    )
+    project = await client.post("/api/projects", json={"name": "P", "notes": "old"})
     pid = project.json()["id"]
 
     await client.post(
@@ -380,6 +378,158 @@ async def test_edit_form_no_longer_renders_notes_textarea(client: AsyncClient) -
     edit = await client.get(f"/projects/{pid}/edit")
     assert edit.status_code == 200
     assert 'name="notes"' not in edit.text
+
+
+async def test_qty_edit_returns_partial_for_htmx(client: AsyncClient) -> None:
+    """Regression: BOM qty edits must return JUST the BOM section partial
+    when the request comes from HTMX, so the rest of the page (and the
+    user's scroll position) doesn't get blown away."""
+    project = await client.post("/api/projects", json={"name": "P"})
+    pid = project.json()["id"]
+    inv = await client.post("/api/inventory", json={"name": "Bolt"})
+    iid = inv.json()["id"]
+    add = await client.post(
+        f"/api/projects/{pid}/items",
+        json={"inventory_item_id": iid, "qty_required": 10},
+    )
+    link_id = add.json()["id"]
+
+    resp = await client.post(
+        f"/projects/{pid}/items/{link_id}/qty",
+        data={"qty_required": "25"},
+        headers={"HX-Request": "true"},
+    )
+    # HTMX swap responses are 200 with HTML, not 303 redirects.
+    assert resp.status_code == 200
+    assert 'id="bom-section"' in resp.text
+    # And the new value rendered into the partial.
+    assert "25" in resp.text
+    # Confirm we got JUST the section, not the full page.
+    assert "<html" not in resp.text.lower()
+
+
+async def test_qty_edit_redirects_for_non_htmx(client: AsyncClient) -> None:
+    """Non-HTMX clients (curl, plain HTML form fallback) still get the
+    303 redirect so they can resume normal page navigation."""
+    project = await client.post("/api/projects", json={"name": "P"})
+    pid = project.json()["id"]
+    inv = await client.post("/api/inventory", json={"name": "Bolt"})
+    iid = inv.json()["id"]
+    add = await client.post(
+        f"/api/projects/{pid}/items",
+        json={"inventory_item_id": iid, "qty_required": 10},
+    )
+    link_id = add.json()["id"]
+
+    resp = await client.post(
+        f"/projects/{pid}/items/{link_id}/qty",
+        data={"qty_required": "25"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+
+
+async def test_add_bom_via_htmx_returns_section_with_new_row(
+    client: AsyncClient,
+) -> None:
+    project = await client.post("/api/projects", json={"name": "P"})
+    pid = project.json()["id"]
+
+    resp = await client.post(
+        f"/projects/{pid}/items",
+        data={"name": "M3x12 SHCS", "qty_required": "5", "qty_consumed": "0"},
+        headers={"HX-Request": "true"},
+    )
+    assert resp.status_code == 200
+    assert 'id="bom-section"' in resp.text
+    assert "M3x12 SHCS" in resp.text
+    # The empty entry row should still be at the bottom (input by id).
+    assert 'id="bom-entry-name"' in resp.text
+
+
+async def test_empty_bom_submit_via_htmx_is_a_noop(client: AsyncClient) -> None:
+    """User tabs through the entry row without typing — should not create
+    a row, just re-render the partial."""
+    project = await client.post("/api/projects", json={"name": "P"})
+    pid = project.json()["id"]
+
+    resp = await client.post(
+        f"/projects/{pid}/items",
+        data={"name": "", "qty_required": "1", "qty_consumed": "0", "inventory_item_id": ""},
+        headers={"HX-Request": "true"},
+    )
+    assert resp.status_code == 200
+    listing = (await client.get(f"/api/projects/{pid}/items")).json()
+    assert listing == []
+
+
+async def test_model_qty_to_print_inline_edit(client: AsyncClient) -> None:
+    project = await client.post("/api/projects", json={"name": "P"})
+    pid = project.json()["id"]
+    model = await client.post("/api/models", json={"name": "Bracket"})
+    mid = model.json()["id"]
+    await client.post(f"/api/projects/{pid}/models", json={"model_id": mid, "qty_to_print": 1})
+
+    resp = await client.post(
+        f"/projects/{pid}/models/{mid}/qty",
+        data={"qty_to_print": "12"},
+        headers={"HX-Request": "true"},
+    )
+    assert resp.status_code == 200
+    assert 'id="models-section"' in resp.text
+
+    # Re-fetch via JSON to confirm persistence.
+    rows = (await client.get(f"/api/projects/{pid}/models")).json()
+    assert rows[0]["qty_to_print"] == 12
+
+
+async def test_model_qty_rejects_below_one(client: AsyncClient) -> None:
+    project = await client.post("/api/projects", json={"name": "P"})
+    pid = project.json()["id"]
+    model = await client.post("/api/models", json={"name": "M"})
+    mid = model.json()["id"]
+    await client.post(f"/api/projects/{pid}/models", json={"model_id": mid, "qty_to_print": 3})
+
+    await client.post(
+        f"/projects/{pid}/models/{mid}/qty",
+        data={"qty_to_print": "0"},
+        headers={"HX-Request": "true"},
+    )
+    rows = (await client.get(f"/api/projects/{pid}/models")).json()
+    assert rows[0]["qty_to_print"] == 3  # unchanged
+
+
+async def test_detail_page_uses_tabbed_thumbnail_and_lightbox(
+    client: AsyncClient,
+) -> None:
+    """The detail page header should render the Alpine-tabbed thumbnail and
+    a lightbox container; the per-photo upload forms moved to the edit
+    page so they should NOT appear on detail."""
+    project = await client.post("/api/projects", json={"name": "Tabbed"})
+    pid = project.json()["id"]
+
+    detail = await client.get(f"/projects/{pid}")
+    assert detail.status_code == 200
+    # Tab buttons exist (Alpine click handlers identify them).
+    assert "tab = 'cover'" in detail.text
+    assert "tab = 'completed'" in detail.text
+    # Lightbox container is in the markup.
+    assert "open-lightbox" in detail.text
+    # No upload forms on the detail page anymore.
+    assert f'/projects/{pid}/photo/cover"' not in detail.text
+    assert f'/projects/{pid}/photo/completed"' not in detail.text
+
+
+async def test_edit_page_now_owns_photo_upload(
+    client: AsyncClient,
+) -> None:
+    project = await client.post("/api/projects", json={"name": "Tabbed"})
+    pid = project.json()["id"]
+    edit = await client.get(f"/projects/{pid}/edit")
+    assert edit.status_code == 200
+    # Upload + remove forms live here now
+    assert f'action="/projects/{pid}/photo/cover"' in edit.text
+    assert f'action="/projects/{pid}/photo/completed"' in edit.text
 
 
 async def test_detail_page_renders_inline_widgets(client: AsyncClient) -> None:

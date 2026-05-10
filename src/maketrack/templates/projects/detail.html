@@ -16,23 +16,70 @@
 <header class="mb-6">
   <a href="/projects" class="text-sm text-slate-500 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400">← Projects</a>
   <div class="mt-2 flex items-start justify-between gap-4">
-    <div class="min-w-0 flex-1">
-      <div class="flex items-center gap-3">
-        <h1 class="truncate text-3xl font-semibold text-slate-900 dark:text-white">{{ project.name }}</h1>
-        <span class="rounded px-2 py-0.5 text-xs {{ status_chip[project.status] }}">{{ project.status }}</span>
-      </div>
-      {% if printer %}
-        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Printer: <a href="/printers/{{ printer.id }}/edit" class="text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300">{{ printer.name }}</a>
-        </p>
-      {% endif %}
-      {% if tags %}
-        <div class="mt-2 flex flex-wrap gap-1">
-          {% for tag in tags %}
-            <span class="rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">{{ tag }}</span>
-          {% endfor %}
+    <div class="flex min-w-0 flex-1 items-start gap-4">
+      {# ── tabbed thumbnail (Cover | After), click to lightbox ── #}
+      {% set has_cover = project.cover_photo_path %}
+      {% set has_after = project.completed_photo_path %}
+      <div x-data="{ tab: '{{ 'completed' if (has_after and not has_cover) else 'cover' }}' }"
+           class="shrink-0">
+        <div class="mb-1 flex gap-1 text-xs">
+          <button type="button" @click="tab = 'cover'"
+                  :class="tab === 'cover'
+                          ? 'rounded bg-slate-200 px-2 py-0.5 font-medium text-slate-900 dark:bg-slate-700 dark:text-white'
+                          : 'rounded px-2 py-0.5 text-slate-500 hover:text-slate-900 dark:hover:text-white'">
+            Cover
+          </button>
+          <button type="button" @click="tab = 'completed'"
+                  :class="tab === 'completed'
+                          ? 'rounded bg-slate-200 px-2 py-0.5 font-medium text-slate-900 dark:bg-slate-700 dark:text-white'
+                          : 'rounded px-2 py-0.5 text-slate-500 hover:text-slate-900 dark:hover:text-white'">
+            After
+          </button>
         </div>
-      {% endif %}
+        <div class="h-28 w-40 overflow-hidden rounded border border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-950">
+          <div x-show="tab === 'cover'" class="h-full w-full">
+            {% if has_cover %}
+              <img src="/media/{{ project.cover_photo_path }}" alt="cover photo"
+                   @click="$dispatch('open-lightbox', { src: '/media/{{ project.cover_photo_path }}' })"
+                   class="h-full w-full cursor-zoom-in object-cover">
+            {% else %}
+              <div class="flex h-full w-full items-center justify-center text-[11px] italic text-slate-400 dark:text-slate-600">
+                no cover photo
+              </div>
+            {% endif %}
+          </div>
+          <div x-show="tab === 'completed'" x-cloak class="h-full w-full">
+            {% if has_after %}
+              <img src="/media/{{ project.completed_photo_path }}" alt="after photo"
+                   @click="$dispatch('open-lightbox', { src: '/media/{{ project.completed_photo_path }}' })"
+                   class="h-full w-full cursor-zoom-in object-cover">
+            {% else %}
+              <div class="flex h-full w-full items-center justify-center text-[11px] italic text-slate-400 dark:text-slate-600">
+                no after photo
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center gap-3">
+          <h1 class="truncate text-3xl font-semibold text-slate-900 dark:text-white">{{ project.name }}</h1>
+          <span class="rounded px-2 py-0.5 text-xs {{ status_chip[project.status] }}">{{ project.status }}</span>
+        </div>
+        {% if printer %}
+          <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Printer: <a href="/printers/{{ printer.id }}/edit" class="text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300">{{ printer.name }}</a>
+          </p>
+        {% endif %}
+        {% if tags %}
+          <div class="mt-2 flex flex-wrap gap-1">
+            {% for tag in tags %}
+              <span class="rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">{{ tag }}</span>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
     </div>
     <a href="/projects/{{ project.id }}/edit"
        class="shrink-0 rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
@@ -52,40 +99,6 @@
     </button>
   {% endfor %}
 </form>
-
-{# ── photos ─────────────────────────────────────────────────────────── #}
-<section class="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-  {% for kind, label, current in [
-      ('cover', 'Cover', project.cover_photo_path),
-      ('completed', 'After', project.completed_photo_path),
-  ] %}
-    <div class="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-      <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500">{{ label }} photo</h3>
-      <div class="mt-2 aspect-video w-full overflow-hidden rounded bg-slate-100 dark:bg-slate-950">
-        {% if current %}
-          <img src="/media/{{ current }}" alt="{{ label }} photo" class="h-full w-full object-cover">
-        {% else %}
-          <div class="flex h-full w-full items-center justify-center text-xs text-slate-400 dark:text-slate-600">
-            no {{ label|lower }} photo
-          </div>
-        {% endif %}
-      </div>
-      <form method="post" action="/projects/{{ project.id }}/photo/{{ kind }}"
-            enctype="multipart/form-data" class="mt-3 flex flex-wrap items-center gap-2">
-        <input type="file" name="file" accept="image/jpeg,image/png,image/webp,image/gif"
-               class="text-xs text-slate-700 file:mr-2 file:rounded file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs hover:file:bg-slate-200 dark:text-slate-300 dark:file:bg-slate-800 dark:hover:file:bg-slate-700">
-        <button class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500">
-          {{ 'Replace' if current else 'Upload' }}
-        </button>
-        {% if current %}
-          <form method="post" action="/projects/{{ project.id }}/photo/{{ kind }}/delete" class="inline">
-            <button class="rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950/50">remove</button>
-          </form>
-        {% endif %}
-      </form>
-    </div>
-  {% endfor %}
-</section>
 
 {# ── description (read-only) + notes (inline editable) ──────────────── #}
 <section class="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -112,70 +125,7 @@
 
 <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 
-{# ── models section ─────────────────────────────────────────────────── #}
-<section class="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-  <h2 class="mb-3 text-base font-semibold text-slate-900 dark:text-white">Models ({{ project_models|length }})</h2>
-
-  {# drop zone: each non-image file becomes a new Model auto-linked here #}
-  <form method="post" action="/projects/{{ project.id }}/upload-files"
-        enctype="multipart/form-data"
-        class="mb-3 rounded border border-dashed border-slate-300 p-3 dark:border-slate-700">
-    <p class="mb-2 text-xs text-slate-500">
-      Drop STL / STEP / 3MF / gcode files — each becomes a new model auto-linked to this project.
-      3MF thumbnails extract automatically.
-    </p>
-    <div class="flex flex-wrap items-center gap-2">
-      <input type="file" name="files" multiple
-             accept=".stl,.step,.stp,.3mf,.gcode,.g,.gco"
-             class="text-sm text-slate-700 file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-slate-200 dark:text-slate-300 dark:file:bg-slate-800 dark:hover:file:bg-slate-700">
-      <button class="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500">Upload</button>
-    </div>
-  </form>
-
-  <ul class="divide-y divide-slate-200 text-sm dark:divide-slate-800">
-    {% for h in project_models %}
-      <li class="flex items-center gap-3 py-2.5">
-        <div class="h-12 w-12 shrink-0 rounded bg-slate-100 dark:bg-slate-950">
-          {% if h.thumbnail_path %}
-            <img src="/media/{{ h.thumbnail_path }}" alt="" class="h-full w-full rounded object-cover">
-          {% endif %}
-        </div>
-        <div class="min-w-0 flex-1">
-          <a href="/models/{{ h.model.id }}" class="block truncate font-medium text-slate-900 hover:text-emerald-600 dark:text-white dark:hover:text-emerald-300">{{ h.model.name }}</a>
-          <p class="text-xs text-slate-500">qty {{ h.link.qty_to_print }}{% if h.link.status %} · {{ h.link.status }}{% endif %}</p>
-        </div>
-        <form method="post" action="/projects/{{ project.id }}/models/{{ h.model.id }}/delete">
-          <button class="text-xs text-rose-500 hover:text-rose-400">remove</button>
-        </form>
-      </li>
-    {% else %}
-      <li class="py-3 text-center text-xs text-slate-500">No models linked yet.</li>
-    {% endfor %}
-  </ul>
-
-  {% if available_models %}
-    <details class="mt-3 border-t border-slate-200 pt-3 dark:border-slate-800">
-      <summary class="cursor-pointer text-xs text-slate-500">link an existing model</summary>
-      <form method="post" action="/projects/{{ project.id }}/models"
-            class="mt-2 flex flex-wrap items-end gap-2">
-        <label class="flex-1">
-          <span class="sr-only">Existing model</span>
-          <select name="model_id" class="{{ ic }} block w-full">
-            {% for m in available_models %}
-              <option value="{{ m.id }}">{{ m.name }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <label class="w-20">
-          <span class="text-xs text-slate-500">Qty</span>
-          <input type="number" name="qty_to_print" value="1" min="1" onfocus="this.select()"
-                 class="{{ ic }} block w-full">
-        </label>
-        <button class="rounded-md bg-emerald-600 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-500">Link</button>
-      </form>
-    </details>
-  {% endif %}
-</section>
+{% include "projects/_models_section.html" %}
 
 {# ── filaments section ──────────────────────────────────────────────── #}
 <section class="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
@@ -229,141 +179,18 @@
   {% endif %}
 </section>
 
-{# ── inventory items / BOM rollup ───────────────────────────────────── #}
-<section class="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900 lg:col-span-2">
-  <h2 class="mb-3 text-base font-semibold text-slate-900 dark:text-white">Inventory / BOM ({{ project_items|length }})</h2>
+{% include "projects/_bom_section.html" %}
 
-  {% if bom %}
-    {% set qty_input = "w-20 rounded border border-slate-300 bg-white px-2 py-1 text-right text-xs tabular-nums focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white invalid:border-rose-500" %}
-    <div class="mb-4 overflow-hidden rounded border border-slate-200 dark:border-slate-800">
-      <table class="w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
-        <thead class="bg-slate-100 text-left text-xs uppercase tracking-wider text-slate-500 dark:bg-slate-950 dark:text-slate-400">
-          <tr>
-            <th class="px-3 py-2">Item</th>
-            <th class="px-3 py-2 text-right">Required</th>
-            <th class="px-3 py-2 text-right">Consumed</th>
-            <th class="px-3 py-2 text-right">On hand</th>
-            <th class="px-3 py-2 text-right">Still to buy</th>
-            <th class="px-3 py-2"></th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-200 dark:divide-slate-800">
-          {% for h in project_items %}
-            {% set b = bom | selectattr('project_item_id', 'equalto', h.link.id) | first %}
-            <tr class="{{ 'bg-amber-50 dark:bg-amber-950/20' if b and b.still_to_buy > 0 }}">
-              <td class="px-3 py-2">
-                {% if h.item %}
-                  <a href="/inventory/{{ h.item.id }}/edit" class="font-medium text-slate-900 hover:text-emerald-600 dark:text-white dark:hover:text-emerald-300">{{ h.item.name }}</a>
-                  <span class="text-xs text-slate-500">{% if h.item.unit %}({{ h.item.unit }}){% endif %}</span>
-                {% else %}
-                  <span class="font-medium text-slate-900 dark:text-white">{{ h.display_name }}</span>
-                  {% if h.display_unit %}<span class="text-xs text-slate-500">({{ h.display_unit }})</span>{% endif %}
-                  <span class="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">unlinked</span>
-                {% endif %}
-                {% if h.link.notes %}<p class="text-xs text-slate-500">{{ h.link.notes }}</p>{% endif %}
-              </td>
-              {# inline editable required + consumed; auto-saves on blur/change #}
-              <td class="px-3 py-2 text-right">
-                <form method="post" action="/projects/{{ project.id }}/items/{{ h.link.id }}/qty" class="inline">
-                  <input type="number" step="0.01" min="0" name="qty_required"
-                         value="{{ '{:g}'.format(h.link.qty_required) }}"
-                         onfocus="this.select()"
-                         onchange="this.form.submit()"
-                         class="{{ qty_input }}">
-                </form>
-              </td>
-              <td class="px-3 py-2 text-right">
-                <form method="post" action="/projects/{{ project.id }}/items/{{ h.link.id }}/qty" class="inline">
-                  <input type="number" step="0.01" min="0" name="qty_consumed"
-                         value="{{ '{:g}'.format(h.link.qty_consumed) }}"
-                         onfocus="this.select()"
-                         onchange="this.form.submit()"
-                         class="{{ qty_input }}">
-                </form>
-              </td>
-              <td class="px-3 py-2 text-right tabular-nums">
-                {% if b and b.on_hand is not none %}{{ '{:g}'.format(b.on_hand) }}{% else %}—{% endif %}
-              </td>
-              <td class="px-3 py-2 text-right tabular-nums {% if b and b.still_to_buy > 0 %}text-amber-700 dark:text-amber-300{% else %}text-emerald-600 dark:text-emerald-400{% endif %}">
-                {% if b %}{{ '{:g}'.format(b.still_to_buy) }}{% else %}—{% endif %}
-              </td>
-              <td class="px-3 py-2 text-right">
-                {% if not h.item and available_items %}
-                  <form method="post" action="/projects/{{ project.id }}/items/{{ h.link.id }}/link" class="inline">
-                    <select name="inventory_item_id"
-                            class="rounded border border-slate-300 bg-white px-1 py-0.5 text-xs dark:border-slate-700 dark:bg-slate-950">
-                      <option value="">link to…</option>
-                      {% for it in available_items %}
-                        <option value="{{ it.id }}">{{ it.name }}</option>
-                      {% endfor %}
-                    </select>
-                    <button class="text-xs text-emerald-600 hover:text-emerald-500 dark:text-emerald-400">link</button>
-                  </form>
-                {% endif %}
-                <form method="post" action="/projects/{{ project.id }}/items/{{ h.link.id }}/delete" class="inline">
-                  <button class="text-xs text-rose-500 hover:text-rose-400">remove</button>
-                </form>
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  {% else %}
-    <p class="mb-4 py-3 text-center text-xs text-slate-500">No BOM items yet.</p>
-  {% endif %}
+</div>
 
-  <div class="grid grid-cols-1 gap-4 border-t border-slate-200 pt-3 dark:border-slate-800 lg:grid-cols-2">
-    {# ── path A: link an existing inventory item ── #}
-    <form method="post" action="/projects/{{ project.id }}/items"
-          class="rounded border border-slate-200 p-3 dark:border-slate-800">
-      <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500">Add from inventory</h3>
-      <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <label class="block sm:col-span-2">
-          <span class="text-xs text-slate-500">Item</span>
-          <select name="inventory_item_id" class="{{ ic }} block w-full" {{ '' if available_items else 'disabled' }}>
-            {% for it in available_items %}
-              <option value="{{ it.id }}">{{ it.name }}{% if it.unit %} · {{ it.unit }}{% endif %} (on hand {{ '{:g}'.format(it.quantity) }})</option>
-            {% else %}
-              <option>No inventory yet</option>
-            {% endfor %}
-          </select>
-        </label>
-        <label class="block">
-          <span class="text-xs text-slate-500">Qty</span>
-          <input type="number" step="0.01" min="0" name="qty_required" required value="1" onfocus="this.select()" class="{{ ic }} block w-full">
-        </label>
-      </div>
-      <button class="mt-3 rounded-md bg-emerald-600 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-500" {{ '' if available_items else 'disabled' }}>
-        Add linked item
-      </button>
-    </form>
-
-    {# ── path B: type a custom item without touching inventory ── #}
-    <form method="post" action="/projects/{{ project.id }}/items"
-          class="rounded border border-slate-200 p-3 dark:border-slate-800">
-      <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500">Add custom item</h3>
-      <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-4">
-        <label class="block sm:col-span-2">
-          <span class="text-xs text-slate-500">Name</span>
-          <input type="text" name="name" required placeholder="M3x12 SHCS"
-                 class="{{ ic }} block w-full">
-        </label>
-        <label class="block">
-          <span class="text-xs text-slate-500">Qty</span>
-          <input type="number" step="0.01" min="0" name="qty_required" required value="1" onfocus="this.select()" class="{{ ic }} block w-full">
-        </label>
-        <label class="block">
-          <span class="text-xs text-slate-500">Unit</span>
-          <input type="text" name="unit" placeholder="each, m…" class="{{ ic }} block w-full">
-        </label>
-      </div>
-      <button class="mt-3 rounded-md bg-emerald-600 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-500">
-        Add custom item
-      </button>
-    </form>
-  </div>
-</section>
-
+{# ── lightbox: any element that dispatches an open-lightbox event with
+   a `src` opens a full-size view. Esc or click anywhere closes. #}
+<div x-data="{ open: false, src: '' }"
+     @open-lightbox.window="open = true; src = $event.detail.src"
+     @keydown.escape.window="open = false"
+     x-show="open" x-cloak
+     @click="open = false"
+     class="fixed inset-0 z-50 flex cursor-zoom-out items-center justify-center bg-black/85 p-4">
+  <img :src="src" alt="" class="max-h-full max-w-full">
 </div>
 {% endblock %}

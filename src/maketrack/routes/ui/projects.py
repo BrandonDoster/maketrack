@@ -14,6 +14,7 @@ from maketrack.models.inventory import InventoryItem
 from maketrack.models.printer import Printer
 from maketrack.routes.ui._forms import (
     format_validation_error,
+    is_htmx,
     null_empty_strings,
     strip_empty_strings,
 )
@@ -25,6 +26,7 @@ from maketrack.schemas.project import (
     ProjectItemLinkCreate,
     ProjectItemLinkUpdate,
     ProjectModelLinkCreate,
+    ProjectModelLinkUpdate,
     ProjectUpdate,
 )
 from maketrack.services import assets as asset_svc
@@ -234,6 +236,22 @@ async def delete(project_id: int, session: SessionDep) -> HTMLResponse:
 # ── inline link actions (HTMX-friendly POST + redirect) ───────────────────
 
 
+async def _models_partial(request: Request, project_id: int, session: AsyncSession) -> HTMLResponse:
+    """HTMX swap target for the project's Models section."""
+    project = await svc.get_project(session, project_id)
+    project_models = await link_svc.list_project_models(session, project_id)
+    available_models = await link_svc.list_unlinked_models(session, project_id)
+    return templates.TemplateResponse(
+        request,
+        "projects/_models_section.html",
+        {
+            "project": project,
+            "project_models": project_models,
+            "available_models": available_models,
+        },
+    )
+
+
 @router.post("/projects/{project_id}/models", response_class=HTMLResponse)
 async def add_model(project_id: int, request: Request, session: SessionDep) -> HTMLResponse:
     form = await request.form()
@@ -243,6 +261,8 @@ async def add_model(project_id: int, request: Request, session: SessionDep) -> H
             qty_to_print=max(1, int(form.get("qty_to_print", "1"))),
         )
     except (ValueError, ValidationError):
+        if is_htmx(request):
+            return await _models_partial(request, project_id, session)
         return RedirectResponse(
             url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER
         )
@@ -251,16 +271,46 @@ async def add_model(project_id: int, request: Request, session: SessionDep) -> H
         await session.commit()
     except NotFoundError:
         pass
+    if is_htmx(request):
+        return await _models_partial(request, project_id, session)
+    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/projects/{project_id}/models/{model_id}/qty", response_class=HTMLResponse)
+async def update_model_qty(
+    project_id: int, model_id: int, request: Request, session: SessionDep
+) -> HTMLResponse:
+    """Inline qty_to_print edit for a project_model link."""
+    form = await request.form()
+    raw = (form.get("qty_to_print") or "").strip()
+    try:
+        qty = int(raw)
+    except ValueError:
+        qty = None
+    if qty is not None and qty >= 1:
+        try:
+            await link_svc.update_model_link(
+                session, project_id, model_id, ProjectModelLinkUpdate(qty_to_print=qty)
+            )
+            await session.commit()
+        except NotFoundError:
+            pass
+    if is_htmx(request):
+        return await _models_partial(request, project_id, session)
     return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/projects/{project_id}/models/{model_id}/delete", response_class=HTMLResponse)
-async def remove_model(project_id: int, model_id: int, session: SessionDep) -> HTMLResponse:
+async def remove_model(
+    project_id: int, model_id: int, request: Request, session: SessionDep
+) -> HTMLResponse:
     try:
         await link_svc.remove_model(session, project_id, model_id)
         await session.commit()
     except NotFoundError:
         pass
+    if is_htmx(request):
+        return await _models_partial(request, project_id, session)
     return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -296,22 +346,58 @@ async def remove_filament(project_id: int, link_id: int, session: SessionDep) ->
     return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
+async def _bom_partial(request: Request, project_id: int, session: AsyncSession) -> HTMLResponse:
+    """Render the BOM section partial. Used as the HTMX swap response so
+    every BOM mutation re-paints the whole section in place — no scroll
+    jump, no full page reload.
+    """
+    project = await svc.get_project(session, project_id)
+    project_items = await link_svc.list_project_items(session, project_id)
+    bom = await bom_svc.project_bom(session, project_id)
+    available_items = (
+        (await session.execute(select(InventoryItem).order_by(InventoryItem.name))).scalars().all()
+    )
+    return templates.TemplateResponse(
+        request,
+        "projects/_bom_section.html",
+        {
+            "project": project,
+            "project_items": project_items,
+            "bom": bom,
+            "available_items": available_items,
+        },
+    )
+
+
 @router.post("/projects/{project_id}/items", response_class=HTMLResponse)
 async def add_item(project_id: int, request: Request, session: SessionDep) -> HTMLResponse:
     form = await request.form()
-    raw_qty = form.get("qty_required") or "0"
+    raw_qty = (form.get("qty_required") or "1").strip() or "1"
+    raw_consumed = (form.get("qty_consumed") or "0").strip() or "0"
     raw_inv_id = (form.get("inventory_item_id") or "").strip()
     raw_name = (form.get("name") or "").strip()
     raw_unit = (form.get("unit") or "").strip()
+
+    # Empty submission (user tabbed through without typing or picking) is a
+    # no-op. Re-render the partial so HTMX gets a valid swap target.
+    if not raw_inv_id and not raw_name:
+        if is_htmx(request):
+            return await _bom_partial(request, project_id, session)
+        return RedirectResponse(
+            url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER
+        )
+
     try:
         payload = ProjectItemLinkCreate(
             inventory_item_id=int(raw_inv_id) if raw_inv_id else None,
             name=raw_name or None,
             unit=raw_unit or None,
             qty_required=float(raw_qty),
-            qty_consumed=0.0,
+            qty_consumed=float(raw_consumed),
         )
     except (ValueError, ValidationError):
+        if is_htmx(request):
+            return await _bom_partial(request, project_id, session)
         return RedirectResponse(
             url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER
         )
@@ -320,6 +406,8 @@ async def add_item(project_id: int, request: Request, session: SessionDep) -> HT
         await session.commit()
     except (NotFoundError, ValueError):
         pass
+    if is_htmx(request):
+        return await _bom_partial(request, project_id, session)
     return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -335,16 +423,22 @@ async def link_item_to_inventory(
             await session.commit()
         except (ValueError, NotFoundError):
             pass
+    if is_htmx(request):
+        return await _bom_partial(request, project_id, session)
     return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/projects/{project_id}/items/{link_id}/delete", response_class=HTMLResponse)
-async def remove_item(project_id: int, link_id: int, session: SessionDep) -> HTMLResponse:
+async def remove_item(
+    project_id: int, link_id: int, request: Request, session: SessionDep
+) -> HTMLResponse:
     try:
         await link_svc.remove_item(session, link_id)
         await session.commit()
     except NotFoundError:
         pass
+    if is_htmx(request):
+        return await _bom_partial(request, project_id, session)
     return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -355,8 +449,8 @@ async def update_item_qty(
     """Inline qty edit: tiny per-row form auto-submits on change.
 
     Accepts qty_required and/or qty_consumed; missing fields are left
-    untouched. Bad input redirects without saving — the user just sees
-    the previous value.
+    untouched. Bad input is silently ignored — the value snaps back to
+    whatever the DB has on the next render.
     """
     form = await request.form()
     payload_data: dict[str, float] = {}
@@ -377,6 +471,8 @@ async def update_item_qty(
             await session.commit()
         except NotFoundError:
             pass
+    if is_htmx(request):
+        return await _bom_partial(request, project_id, session)
     return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
