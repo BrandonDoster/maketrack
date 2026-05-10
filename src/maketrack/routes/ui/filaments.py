@@ -24,14 +24,30 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
 @router.get("/filaments", response_class=HTMLResponse)
-async def list_page(request: Request, session: SessionDep) -> HTMLResponse:
+async def list_page(
+    request: Request,
+    session: SessionDep,
+    q: str | None = None,
+    material: str | None = None,
+    source: str | None = None,
+) -> HTMLResponse:
     await ensure_fresh_sources(get_sessionmaker(), source_factory=build_source)
-    filaments = await svc.list_filaments(session)
+    filaments = await svc.list_filaments(
+        session, search=q, material=material or None, source=source or None
+    )
     enabled_sources = await sources_svc.list_sources(session, enabled_only=True)
+    materials = await svc.distinct_materials(session)
     return templates.TemplateResponse(
         request,
         "filaments/list.html",
-        {"filaments": filaments, "enabled_sources": enabled_sources},
+        {
+            "filaments": filaments,
+            "enabled_sources": enabled_sources,
+            "q": q or "",
+            "selected_material": material or "",
+            "selected_source": source or "",
+            "materials": materials,
+        },
     )
 
 

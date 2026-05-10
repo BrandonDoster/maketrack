@@ -30,10 +30,13 @@ async def list_projects(
     session: AsyncSession,
     *,
     status: str | None = None,
+    search: str | None = None,
 ) -> Sequence[Project]:
     stmt = select(Project).order_by(Project.created_at.desc())
     if status is not None:
         stmt = stmt.where(Project.status == status)
+    if search:
+        stmt = stmt.where(Project.name.icontains(search))
     return (await session.execute(stmt)).scalars().all()
 
 

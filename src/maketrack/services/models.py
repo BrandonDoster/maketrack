@@ -50,10 +50,13 @@ async def list_models(
     *,
     tag: str | None = None,
     source_type: str | None = None,
+    search: str | None = None,
 ) -> Sequence[Model]:
     stmt = select(Model).order_by(Model.name)
     if source_type is not None:
         stmt = stmt.where(Model.source_type == source_type)
+    if search:
+        stmt = stmt.where(Model.name.icontains(search))
     rows = (await session.execute(stmt)).scalars().all()
     if tag is None:
         return rows
@@ -67,6 +70,7 @@ async def list_models_with_context(
     *,
     tag: str | None = None,
     source_type: str | None = None,
+    search: str | None = None,
     hide_project_models: bool = False,
 ) -> list[ModelListEntry]:
     """Like list_models but pulls in the data the list page needs in three
@@ -75,6 +79,8 @@ async def list_models_with_context(
     stmt = select(Model).order_by(Model.name)
     if source_type is not None:
         stmt = stmt.where(Model.source_type == source_type)
+    if search:
+        stmt = stmt.where(Model.name.icontains(search))
     models = list((await session.execute(stmt)).scalars().all())
     if not models:
         return []

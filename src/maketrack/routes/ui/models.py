@@ -56,10 +56,13 @@ async def list_page(
     view: str | None = None,
     hide_project_models: bool | None = None,
     tag: str | None = None,
+    q: str | None = None,
 ) -> HTMLResponse:
     view = _resolve_view(view, request)
     hide_resolved = _resolve_hide(hide_project_models, request)
-    items = await svc.list_models_with_context(session, tag=tag, hide_project_models=hide_resolved)
+    items = await svc.list_models_with_context(
+        session, tag=tag, hide_project_models=hide_resolved, search=q
+    )
     return templates.TemplateResponse(
         request,
         "models/list.html",
@@ -68,6 +71,7 @@ async def list_page(
             "view": view,
             "hide_project_models": hide_resolved,
             "tag": tag,
+            "q": q or "",
         },
     )
 

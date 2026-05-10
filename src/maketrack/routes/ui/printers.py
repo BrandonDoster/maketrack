@@ -20,9 +20,17 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
 @router.get("/printers", response_class=HTMLResponse)
-async def list_page(request: Request, session: SessionDep) -> HTMLResponse:
-    printers = await svc.list_printers(session)
-    return templates.TemplateResponse(request, "printers/list.html", {"printers": printers})
+async def list_page(
+    request: Request,
+    session: SessionDep,
+    q: str | None = None,
+) -> HTMLResponse:
+    printers = await svc.list_printers(session, search=q)
+    return templates.TemplateResponse(
+        request,
+        "printers/list.html",
+        {"printers": printers, "q": q or ""},
+    )
 
 
 @router.get("/printers/new", response_class=HTMLResponse)

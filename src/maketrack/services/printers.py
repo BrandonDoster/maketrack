@@ -8,8 +8,14 @@ from maketrack.models.printer import Printer
 from maketrack.schemas.printer import PrinterCreate, PrinterUpdate
 
 
-async def list_printers(session: AsyncSession) -> Sequence[Printer]:
+async def list_printers(
+    session: AsyncSession,
+    *,
+    search: str | None = None,
+) -> Sequence[Printer]:
     stmt = select(Printer).order_by(Printer.name)
+    if search:
+        stmt = stmt.where(Printer.name.icontains(search))
     return (await session.execute(stmt)).scalars().all()
 
 

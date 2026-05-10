@@ -3,11 +3,11 @@
 {% block title %}Models · MakeTrack{% endblock %}
 
 {% macro view_url(target_view) -%}
-?view={{ target_view }}{% if hide_project_models %}&hide_project_models=true{% endif %}{% if tag %}&tag={{ tag }}{% endif %}
+?view={{ target_view }}{% if hide_project_models %}&hide_project_models=true{% endif %}{% if tag %}&tag={{ tag }}{% endif %}{% if q %}&q={{ q }}{% endif %}
 {%- endmacro %}
 
 {% macro filter_url() -%}
-?view={{ view }}{% if not hide_project_models %}&hide_project_models=true{% endif %}{% if tag %}&tag={{ tag }}{% endif %}
+?view={{ view }}{% if not hide_project_models %}&hide_project_models=true{% endif %}{% if tag %}&tag={{ tag }}{% endif %}{% if q %}&q={{ q }}{% endif %}
 {%- endmacro %}
 
 {% macro project_chip(it) -%}
@@ -43,7 +43,15 @@
          class="{{ btn_active if view == v else btn_idle }}">{{ label }}</a>
     {% endfor %}
   </div>
-  <div class="flex items-center gap-2">
+  <div class="flex flex-wrap items-center gap-2">
+    {# search preserves view + filter via hidden inputs #}
+    <form method="get" class="flex items-center gap-1">
+      <input type="hidden" name="view" value="{{ view }}">
+      {% if hide_project_models %}<input type="hidden" name="hide_project_models" value="true">{% endif %}
+      {% if tag %}<input type="hidden" name="tag" value="{{ tag }}">{% endif %}
+      <input type="search" name="q" value="{{ q }}" placeholder="search models…"
+             class="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+    </form>
     <a href="{{ filter_url() }}"
        class="rounded px-3 py-1 text-xs {% if hide_project_models %}bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300{% else %}text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white{% endif %}">
       {% if hide_project_models %}✓ {% endif %}hide project-scoped models
@@ -64,7 +72,11 @@
 
 {% if not items %}
   <div class="rounded-lg border border-dashed border-slate-300 p-12 text-center text-slate-500 dark:border-slate-800">
-    {% if hide_project_models %}
+    {% if q %}
+      No matches for "<span class="font-mono">{{ q }}</span>".
+      <a href="/models?view={{ view }}{% if hide_project_models %}&hide_project_models=true{% endif %}"
+         class="text-emerald-600 hover:text-emerald-500 dark:text-emerald-400">Clear search</a>.
+    {% elif hide_project_models %}
       All your models are scoped to projects. Toggle the filter off to see them.
     {% else %}
       No models yet. Create one to start uploading STL/STEP/3MF files.

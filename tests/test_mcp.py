@@ -29,7 +29,6 @@ from maketrack.mcp.server import (
     upload_model_asset,
 )
 
-
 pytestmark = pytest.mark.usefixtures("db_engine")
 
 
@@ -129,12 +128,8 @@ async def test_list_filaments(client, session) -> None:
 async def test_find_filament_for_project_coverage_states(client, session) -> None:
     from tests.factories import LocalFilamentFactory, persist
 
-    plenty = await persist(
-        session, LocalFilamentFactory(name="Plenty", remaining_weight_g=1000)
-    )
-    short = await persist(
-        session, LocalFilamentFactory(name="Short", remaining_weight_g=10)
-    )
+    plenty = await persist(session, LocalFilamentFactory(name="Plenty", remaining_weight_g=1000))
+    short = await persist(session, LocalFilamentFactory(name="Short", remaining_weight_g=10))
     unknown = await persist(
         session, LocalFilamentFactory(name="UnknownRem", remaining_weight_g=None)
     )
@@ -238,17 +233,13 @@ async def test_upload_model_asset_with_3mf_extracts_thumbnail(client) -> None:
 
 async def test_upload_model_asset_rejects_bad_base64() -> None:
     with pytest.raises(ValueError, match="not valid base64"):
-        await upload_model_asset(
-            model_id=1, filename="x.stl", content_base64="not===valid==="
-        )
+        await upload_model_asset(model_id=1, filename="x.stl", content_base64="not===valid===")
 
 
 async def test_set_model_thumbnail_via_mcp(client) -> None:
     m = await client.post("/api/models", json={"name": "T"})
     mid = m.json()["id"]
-    img = await upload_model_asset(
-        model_id=mid, filename="hero.png", content_base64=_b64(_PNG)
-    )
+    img = await upload_model_asset(model_id=mid, filename="hero.png", content_base64=_b64(_PNG))
 
     out = await set_model_thumbnail(model_id=mid, asset_id=img["id"])
     assert out["thumbnail_asset_id"] == img["id"]

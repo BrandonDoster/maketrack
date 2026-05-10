@@ -303,3 +303,27 @@ All notable changes to this project will be documented here. Format roughly foll
   decorator returns the function unchanged) — covers happy path +
   error cases for all 11 tools.
 - README updated with the run command + tool table. 171 tests pass.
+
+### M8 — search + filter polish
+- Each of the five list pages (filaments, inventory, models, projects,
+  printers) now has a `?q=...` search box wired to a server-side
+  `name ILIKE %q%` (case-insensitive on ASCII via SQLite default
+  collation). Empty-state copy is context-aware: "No matches for X" with
+  a Clear-filters link, vs. the standard "no rows yet" hint when the
+  list is genuinely empty.
+- Filter UIs were missing for the API filters that already existed —
+  exposed them now: filaments get material (populated from a distinct
+  query of what's actually in the table) + source dropdowns, inventory
+  gets a category dropdown plus a "below reorder" toggle that shows
+  only items at or under their reorder threshold.
+- Models toolbar gains a search input alongside the existing view
+  switcher, hide-project filter, and save-as-default button. Search is
+  preserved across view changes via URL param.
+- Projects status chips preserve the active search; the search form
+  preserves the active status as a hidden input. Round-trips cleanly.
+- Pagination deferred. At realistic homelab scales (<200 rows per
+  list) it's noise — added a "Planned (post-v1)" note in CLAUDE.md
+  with the shape we'd want when it matters.
+- Verified end-to-end through Docker: all five lists filtered
+  correctly, empty states rendered the search query, "below reorder"
+  collapsed to just the under-threshold item. 185 tests pass.

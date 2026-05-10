@@ -53,9 +53,12 @@ def _parse_tags(raw: str | None) -> list[str]:
 
 @router.get("/projects", response_class=HTMLResponse)
 async def list_page(
-    request: Request, session: SessionDep, status: str | None = None
+    request: Request,
+    session: SessionDep,
+    status: str | None = None,
+    q: str | None = None,
 ) -> HTMLResponse:
-    rows = await svc.list_projects(session, status=status)
+    rows = await svc.list_projects(session, status=status, search=q)
     decorated = [
         {
             "project": p,
@@ -70,6 +73,7 @@ async def list_page(
             "items": decorated,
             "current_status": status,
             "statuses": PROJECT_STATUSES,
+            "q": q or "",
         },
     )
 

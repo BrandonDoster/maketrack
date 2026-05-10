@@ -22,6 +22,7 @@ async def list_filaments(
     *,
     material: str | None = None,
     source: str | None = None,
+    search: str | None = None,
     include_archived: bool = False,
 ) -> Sequence[Filament]:
     stmt = select(Filament)
@@ -29,11 +30,28 @@ async def list_filaments(
         stmt = stmt.where(Filament.material == material)
     if source is not None:
         stmt = stmt.where(Filament.source == source)
+    if search:
+        stmt = stmt.where(Filament.name.icontains(search))
     if not include_archived:
         stmt = stmt.where(Filament.archived_at.is_(None))
     stmt = stmt.order_by(Filament.id)
     result = await session.execute(stmt)
     return result.scalars().all()
+
+
+async def distinct_materials(session: AsyncSession) -> Sequence[str]:
+    """Materials already represented in the table — populates the filter dropdown
+    without hard-coding a list."""
+    rows = (
+        await session.execute(
+            select(Filament.material)
+            .where(Filament.material.is_not(None))
+            .where(Filament.archived_at.is_(None))
+            .distinct()
+            .order_by(Filament.material)
+        )
+    ).all()
+    return [m for (m,) in rows if m]
 
 
 async def get_filament(session: AsyncSession, filament_id: int) -> Filament:

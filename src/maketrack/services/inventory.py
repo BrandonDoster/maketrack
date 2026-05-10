@@ -12,10 +12,19 @@ async def list_items(
     session: AsyncSession,
     *,
     category: str | None = None,
+    search: str | None = None,
+    below_reorder: bool = False,
 ) -> Sequence[InventoryItem]:
     stmt = select(InventoryItem).order_by(InventoryItem.name)
     if category is not None:
         stmt = stmt.where(InventoryItem.category == category)
+    if search:
+        stmt = stmt.where(InventoryItem.name.icontains(search))
+    if below_reorder:
+        # Items where a threshold is set and current quantity is at or below it.
+        stmt = stmt.where(InventoryItem.reorder_threshold.is_not(None)).where(
+            InventoryItem.quantity <= InventoryItem.reorder_threshold
+        )
     return (await session.execute(stmt)).scalars().all()
 
 

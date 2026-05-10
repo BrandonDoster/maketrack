@@ -16,6 +16,19 @@
   </a>
 </header>
 
+{% set ic = "rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white" %}
+
+<form method="get" class="mb-4 flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+  <label class="block">
+    <span class="block text-xs text-slate-500">Search</span>
+    <input type="search" name="q" value="{{ q }}" placeholder="name…" class="{{ ic }}">
+  </label>
+  <button type="submit" class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500">Apply</button>
+  {% if q %}
+    <a href="/printers" class="rounded px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800">Clear</a>
+  {% endif %}
+</form>
+
 <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
   {% for p in printers %}
     <article class="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
@@ -31,7 +44,12 @@
     </article>
   {% else %}
     <div class="col-span-full rounded-lg border border-dashed border-slate-300 p-12 text-center text-slate-500 dark:border-slate-800">
-      No printers yet.
+      {% if q %}
+        No matches for "<span class="font-mono">{{ q }}</span>".
+        <a href="/printers" class="text-emerald-600 hover:text-emerald-500 dark:text-emerald-400">Clear filters</a>.
+      {% else %}
+        No printers yet.
+      {% endif %}
     </div>
   {% endfor %}
 </section>

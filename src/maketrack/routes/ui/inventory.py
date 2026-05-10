@@ -26,9 +26,29 @@ def _has_uploaded_photo(form_field) -> bool:
 
 
 @router.get("/inventory", response_class=HTMLResponse)
-async def list_page(request: Request, session: SessionDep) -> HTMLResponse:
-    items = await svc.list_items(session)
-    return templates.TemplateResponse(request, "inventory/list.html", {"items": items})
+async def list_page(
+    request: Request,
+    session: SessionDep,
+    q: str | None = None,
+    category: str | None = None,
+    below_reorder: bool = False,
+) -> HTMLResponse:
+    items = await svc.list_items(
+        session,
+        search=q,
+        category=category or None,
+        below_reorder=below_reorder,
+    )
+    return templates.TemplateResponse(
+        request,
+        "inventory/list.html",
+        {
+            "items": items,
+            "q": q or "",
+            "selected_category": category or "",
+            "below_reorder": below_reorder,
+        },
+    )
 
 
 @router.get("/inventory/new", response_class=HTMLResponse)
