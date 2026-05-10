@@ -1,4 +1,4 @@
-# MakeTrack
+# maketrack
 
 A self-hosted 3D printing project tracker with inventory, filament management, and pluggable external filament sources. Single-user, LAN-only, AGPL-3.0. Ships as a single Docker container on GHCR.
 

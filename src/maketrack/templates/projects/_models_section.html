@@ -2,12 +2,12 @@
    partial so swaps target #models-section. In read mode the section is
    purely informational; edit mode reveals the add form + inline edits. #}
 
-{% set ic = "rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white invalid:border-rose-500" %}
-{% set qty_input = "w-14 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-right text-xs tabular-nums focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white invalid:border-rose-500" %}
+{% set ic = "rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 focus:border-crimson focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white invalid:border-rose-500" %}
+{% set qty_input = "w-14 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-right text-xs tabular-nums focus:border-crimson focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white invalid:border-rose-500" %}
 
 {% set model_link_status_chip = {
   'pending': 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
-  'printed': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
+  'printed': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-crimson',
   'failed': 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300',
 } %}
 
@@ -27,7 +27,7 @@
         <input type="file" name="files" multiple
                accept=".stl,.step,.stp,.3mf,.gcode,.g,.gco"
                class="text-sm text-slate-700 file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-slate-200 dark:text-slate-300 dark:file:bg-slate-800 dark:hover:file:bg-slate-700">
-        <button class="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500">Upload</button>
+        <button class="rounded-md bg-crimson px-3 py-1.5 text-sm font-medium text-white hover:bg-crimson">Upload</button>
       </div>
     </form>
   {% endif %}
@@ -40,7 +40,7 @@
             <img src="/media/{{ h.thumbnail_path }}" alt="" class="h-full w-full rounded object-cover">
           {% endif %}
         </div>
-        <a href="/models/{{ h.model.id }}" class="min-w-0 flex-1 truncate font-medium text-slate-900 hover:text-emerald-600 dark:text-white dark:hover:text-emerald-300">{{ h.model.name }}</a>
+        <a href="/models/{{ h.model.id }}" class="min-w-0 flex-1 truncate font-medium text-slate-900 hover:text-crimson dark:text-white dark:hover:text-crimson">{{ h.model.name }}</a>
         {% if edit_mode %}
           <select name="status"
                   hx-post="/projects/{{ project.id }}/models/{{ h.model.id }}/status"
@@ -99,7 +99,7 @@
           <input type="number" name="qty_to_print" value="1" min="1" onfocus="this.select()"
                  class="{{ ic }} block w-full">
         </label>
-        <button class="rounded-md bg-emerald-600 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-500">Link</button>
+        <button class="rounded-md bg-crimson px-3 py-2 text-xs font-medium text-white hover:bg-crimson">Link</button>
       </form>
     </details>
   {% endif %}

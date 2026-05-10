@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}MakeTrack{% endblock %}</title>
+  <title>{% block title %}maketrack{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="/static/brand/maketrack-icon.svg">
   {# FOUC-prevention: apply the theme class on <html> before any styles
      evaluate. Reads the maketrack_theme cookie, falls back to OS preference. #}
   <script>
@@ -18,14 +19,30 @@
   {% if tailwind_compiled() %}
     <link rel="stylesheet" href="/static/tailwind.css">
   {% else %}
+    {# Dev fallback: mirror the brand tokens here so utilities like
+       `bg-crimson` work without the compiled stylesheet. #}
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>tailwind.config = { darkMode: 'class' };</script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              crimson: '#C8252C',
+              'slate-ink': '#1F2937',
+              bone: '#F5F2ED',
+              steel: '#6B6E72',
+            },
+          },
+        },
+      };
+    </script>
   {% endif %}
   <script src="/static/vendor/htmx.min.js" defer></script>
   <script src="/static/vendor/alpine.min.js" defer></script>
   <script src="/static/hardware-presets.js" defer></script>
   <style>
-    body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    body { font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
     /* Hide the browser-supplied spin buttons on number inputs.
        Typing is faster than clicking, and the carets eat space in tight cells. */
     input[type="number"]::-webkit-inner-spin-button,

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="title desc">
+<title id="title">maketrack icon</title>
+<desc id="desc">Build wedge mark for the maketrack 3D printing project tracker</desc>
+<rect x="0" y="0" width="512" height="512" fill="#F5F2ED" rx="80"/>
+<rect x="214.0" y="156.6" width="84.0" height="19.6" fill="#C8252C"/>
+<rect x="193.0" y="181.8" width="126.0" height="19.6" fill="#C8252C"/>
+<rect x="172.0" y="207.0" width="168.0" height="19.6" fill="#C8252C"/>
+<rect x="151.0" y="232.2" width="210.0" height="19.6" fill="#C8252C"/>
+<rect x="130.0" y="257.4" width="252.0" height="19.6" fill="#C8252C"/>
+<rect x="109.0" y="282.6" width="294.0" height="19.6" fill="#C8252C"/>
+<rect x="88.0" y="307.8" width="336.0" height="19.6" fill="#C8252C"/>
+<rect x="46.0" y="333.0" width="420.0" height="22.4" fill="#1F2937"/>
+</svg>

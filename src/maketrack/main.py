@@ -70,7 +70,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     app = FastAPI(
-        title="MakeTrack",
+        title="maketrack",
         version=__version__,
         lifespan=lifespan,
     )

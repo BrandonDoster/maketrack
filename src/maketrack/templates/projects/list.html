@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}Projects · MakeTrack{% endblock %}
+{% block title %}Projects · maketrack{% endblock %}
 
 {% set status_colors = {
   'planning': ('bg-sky-100 text-sky-800', 'bg-sky-900/40 text-sky-300'),
   'printing': ('bg-amber-100 text-amber-800', 'bg-amber-900/40 text-amber-300'),
-  'done': ('bg-emerald-100 text-emerald-800', 'bg-emerald-900/40 text-emerald-300'),
+  'done': ('bg-emerald-100 text-emerald-800', 'bg-emerald-900/40 text-crimson'),
   'archived': ('bg-slate-200 text-slate-700', 'bg-slate-800 text-slate-400'),
   'abandoned': ('bg-rose-100 text-rose-800', 'bg-rose-900/40 text-rose-300'),
 } %}
@@ -20,7 +20,7 @@
   </div>
   <form method="post" action="/projects/new">
     <button type="submit"
-            class="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500">
+            class="rounded-md bg-crimson px-4 py-2 text-sm font-medium text-white hover:bg-crimson">
       + New project
     </button>
   </form>
@@ -45,7 +45,7 @@
     <label class="block">
       <span class="block text-xs text-slate-500">Search</span>
       <input type="search" name="q" value="{{ q }}" placeholder="name…"
-             class="rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+             class="rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 focus:border-crimson focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white">
     </label>
     {% if q %}
       <a href="/projects{% if current_status %}?status={{ current_status }}{% endif %}"
@@ -62,7 +62,7 @@
        shows something visual until the user decides to set a "cover". #}
     {% set photo = p.cover_photo_path or p.completed_photo_path %}
     <a href="/projects/{{ p.id }}"
-       class="block overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:border-emerald-500 hover:shadow dark:border-slate-800 dark:bg-slate-900 dark:hover:border-emerald-700">
+       class="block overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:border-crimson hover:shadow dark:border-slate-800 dark:bg-slate-900 dark:hover:border-crimson">
       <div class="aspect-video w-full bg-slate-100 dark:bg-slate-950">
         {% if photo %}
           <img src="/media/{{ photo }}" alt="" class="h-full w-full object-cover">
@@ -83,7 +83,7 @@
         {% if it.tags %}
           <div class="mt-3 flex flex-wrap gap-1">
             {% for tag in it.tags %}
-              <span class="rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">{{ tag }}</span>
+              <span class="rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-800 dark:bg-emerald-900/40 dark:text-crimson">{{ tag }}</span>
             {% endfor %}
           </div>
         {% endif %}
@@ -93,7 +93,7 @@
     <div class="col-span-full rounded-lg border border-dashed border-slate-300 p-12 text-center text-slate-500 dark:border-slate-800">
       {% if q or current_status %}
         No matches{% if q %} for "<span class="font-mono">{{ q }}</span>"{% endif %}{% if current_status %} in <span class="font-mono">{{ current_status }}</span>{% endif %}.
-        <a href="/projects" class="text-emerald-600 hover:text-emerald-500 dark:text-emerald-400">Clear filters</a>.
+        <a href="/projects" class="text-crimson hover:text-crimson dark:text-crimson">Clear filters</a>.
       {% else %}
         No projects yet. Create one to start linking models, filaments, and BOM items.
       {% endif %}

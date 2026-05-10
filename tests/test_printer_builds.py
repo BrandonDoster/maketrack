@@ -83,10 +83,10 @@ async def test_edit_page_button_active_state(client: AsyncClient) -> None:
     import re
 
     match = re.search(
-        r'<button[^>]+form="printer-basic-form"[^>]+class="[^"]*bg-emerald-600[^"]*"[^>]*>\s*Done editing\s*</button>',
+        r'<button[^>]+form="printer-basic-form"[^>]+class="[^"]*bg-crimson[^"]*"[^>]*>\s*Done editing\s*</button>',
         edit.text,
     )
-    assert match, "Done editing should be the active emerald submit button"
+    assert match, "Done editing should be the active crimson submit button"
 
 
 async def test_printer_photo_upload_and_remove(client: AsyncClient) -> None:

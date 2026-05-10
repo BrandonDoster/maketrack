@@ -9,7 +9,16 @@
 ] %}
 <nav class="border-b border-slate-200 bg-slate-50/80 backdrop-blur dark:border-slate-800 dark:bg-slate-900/60">
   <div class="mx-auto flex max-w-6xl items-center gap-6 px-4 py-3">
-    <a href="/" class="text-lg font-semibold tracking-tight text-emerald-600 dark:text-emerald-400">MakeTrack</a>
+    <a href="/" class="flex items-center" aria-label="maketrack home">
+      {# Two wordmark assets: the canonical one (slate-ink "make" + crimson
+         "track") for light backgrounds, and a dark-mode variant with the
+         "make" text recolored to bone so it stays legible on slate-950.
+         Both fill colors stay inside the brand palette. #}
+      <img src="/static/brand/maketrack-wordmark.svg" alt="maketrack"
+           class="block h-7 w-auto dark:hidden">
+      <img src="/static/brand/maketrack-wordmark-dark.svg" alt="maketrack"
+           class="hidden h-7 w-auto dark:block">
+    </a>
     <div class="flex gap-1 text-sm">
       {% for href, label in nav_items %}
         <a href="{{ href }}"

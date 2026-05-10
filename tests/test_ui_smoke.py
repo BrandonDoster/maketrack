@@ -7,7 +7,8 @@ from tests.factories import LocalFilamentFactory, RemoteFilamentFactory, persist
 async def test_dashboard_renders(client: AsyncClient) -> None:
     resp = await client.get("/")
     assert resp.status_code == 200
-    assert "MakeTrack" in resp.text
+    # Brand wordmark renders the lowercase name via the SVG <img alt>.
+    assert "maketrack" in resp.text
 
 
 async def test_filaments_list_renders(client: AsyncClient, session: AsyncSession) -> None:

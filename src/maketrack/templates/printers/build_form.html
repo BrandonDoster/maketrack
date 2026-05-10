@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 
-{% block title %}Edit {{ build.name }} · {{ printer.name }} · MakeTrack{% endblock %}
+{% block title %}Edit {{ build.name }} · {{ printer.name }} · maketrack{% endblock %}
 
 {% block content %}
 <header class="mb-6">
-  <a href="/printers/{{ printer.id }}" class="text-sm text-slate-500 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400">← {{ printer.name }}</a>
+  <a href="/printers/{{ printer.id }}" class="text-sm text-slate-500 hover:text-crimson dark:text-slate-400 dark:hover:text-crimson">← {{ printer.name }}</a>
   <h1 class="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">Edit build entry</h1>
 </header>
 
@@ -14,7 +14,7 @@
   </div>
 {% endif %}
 
-{% set ic = "mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white" %}
+{% set ic = "mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-crimson focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white" %}
 {% set lbl = "block text-sm font-medium text-slate-700 dark:text-slate-300" %}
 
 <form method="post" action="/printers/{{ printer.id }}/builds/{{ build.id }}"
@@ -59,7 +59,7 @@
 
   <div class="flex justify-end gap-2">
     <a href="/printers/{{ printer.id }}" class="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">Cancel</a>
-    <button type="submit" class="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500">Save</button>
+    <button type="submit" class="rounded-md bg-crimson px-4 py-2 text-sm font-medium text-white hover:bg-crimson">Save</button>
   </div>
 </form>
 
@@ -67,7 +67,7 @@
   <h2 class="text-lg font-semibold text-slate-900 dark:text-white">Models in this build</h2>
   <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Add the printed parts that compose this build.</p>
 
-  {% set ic2 = "rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white" %}
+  {% set ic2 = "rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 focus:border-crimson focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white" %}
 
   <table class="mt-4 w-full text-sm">
     <thead>
@@ -82,7 +82,7 @@
       {% for link in build.model_links %}
         <tr>
           <td class="py-2">
-            <a href="/models/{{ link.model.id }}" class="text-emerald-600 hover:text-emerald-500 dark:text-emerald-400">{{ link.model.name }}</a>
+            <a href="/models/{{ link.model.id }}" class="text-crimson hover:text-crimson dark:text-crimson">{{ link.model.name }}</a>
           </td>
           <td class="py-2 text-right">
             <form method="post" action="/printers/{{ printer.id }}/builds/{{ build.id }}/models/{{ link.model.id }}" class="inline">
@@ -121,7 +121,7 @@
             </select>
             <input type="number" name="qty" min="1" value="1" class="{{ ic2 }} w-20" placeholder="qty">
             <input type="text" name="notes" placeholder="notes (optional)" class="{{ ic2 }} flex-1 min-w-[8rem]">
-            <button type="submit" class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500">Add</button>
+            <button type="submit" class="rounded-md bg-crimson px-3 py-1.5 text-xs font-medium text-white hover:bg-crimson">Add</button>
           </form>
         </td>
       </tr>

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard · MakeTrack{% endblock %}
+{% block title %}Dashboard · maketrack{% endblock %}
 
 {% block content %}
 <header class="mb-8">
@@ -8,8 +8,8 @@
   <p class="mt-1 text-slate-500 dark:text-slate-400">Self-hosted 3D printing project tracker.</p>
 </header>
 
-{% set tile = "group rounded-lg border border-slate-200 bg-white p-5 hover:border-emerald-500 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-emerald-700" %}
-{% set tile_label = "text-sm uppercase tracking-wider text-slate-500 group-hover:text-emerald-600 dark:text-slate-400 dark:group-hover:text-emerald-400" %}
+{% set tile = "group rounded-lg border border-slate-200 bg-white p-5 hover:border-crimson dark:border-slate-800 dark:bg-slate-900 dark:hover:border-crimson" %}
+{% set tile_label = "text-sm uppercase tracking-wider text-slate-500 group-hover:text-crimson dark:text-slate-400 dark:group-hover:text-crimson" %}
 {% set tile_value = "mt-2 text-3xl font-semibold text-slate-900 dark:text-white" %}
 {% set tile_hint = "mt-1 text-xs text-slate-500" %}
 
@@ -59,7 +59,7 @@
             <tr>
               <td class="px-3 py-2">
                 <a href="/inventory/{{ row.inventory_item_id }}/edit"
-                   class="font-medium text-slate-900 hover:text-emerald-600 dark:text-white dark:hover:text-emerald-300">{{ row.name }}</a>
+                   class="font-medium text-slate-900 hover:text-crimson dark:text-white dark:hover:text-crimson">{{ row.name }}</a>
                 {% if row.unit %}<span class="text-xs text-slate-500">({{ row.unit }})</span>{% endif %}
               </td>
               <td class="px-3 py-2 text-right tabular-nums">{{ '{:g}'.format(row.on_hand) }}</td>
@@ -68,7 +68,7 @@
               </td>
               <td class="px-3 py-2 text-xs text-slate-500">
                 {% for pid in row.project_ids %}
-                  <a href="/projects/{{ pid }}" class="hover:text-emerald-600 dark:hover:text-emerald-300">#{{ pid }}</a>{% if not loop.last %}, {% endif %}
+                  <a href="/projects/{{ pid }}" class="hover:text-crimson dark:hover:text-crimson">#{{ pid }}</a>{% if not loop.last %}, {% endif %}
                 {% endfor %}
               </td>
             </tr>

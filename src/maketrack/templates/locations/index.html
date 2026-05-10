@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 
-{% block title %}Locations · MakeTrack{% endblock %}
+{% block title %}Locations · maketrack{% endblock %}
 
 {% block content %}
 <header class="mb-6">
-  <a href="/settings" class="text-sm text-slate-500 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400">← Settings</a>
+  <a href="/settings" class="text-sm text-slate-500 hover:text-crimson dark:text-slate-400 dark:hover:text-crimson">← Settings</a>
   <h1 class="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">Locations</h1>
   <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
     Bins, shelves, and drawers — anywhere inventory items physically live.
@@ -17,7 +17,7 @@
   </div>
 {% endif %}
 
-{% set ic = "rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white" %}
+{% set ic = "rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-crimson focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white" %}
 
 <form method="post" action="/settings/locations" class="mb-6 flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
   <label class="block">
@@ -34,7 +34,7 @@
       {% endfor %}
     </select>
   </label>
-  <button type="submit" class="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500">
+  <button type="submit" class="rounded-md bg-crimson px-4 py-2 text-sm font-medium text-white hover:bg-crimson">
     Add location
   </button>
 </form>
@@ -58,7 +58,7 @@
             {{ item_counts.get(loc.id, 0) }}
           </td>
           <td class="px-4 py-3 text-right">
-            <a href="/settings/locations/{{ loc.id }}/edit" class="text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300">Edit</a>
+            <a href="/settings/locations/{{ loc.id }}/edit" class="text-crimson hover:text-crimson dark:text-crimson dark:hover:text-crimson">Edit</a>
             <form method="post" action="/settings/locations/{{ loc.id }}/delete" class="inline"
                   onsubmit="return confirm('Delete {{ loc.name }}? Items in it will lose their location.');">
               <button class="ml-3 text-rose-600 hover:text-rose-500 dark:text-rose-400 dark:hover:text-rose-300">Delete</button>

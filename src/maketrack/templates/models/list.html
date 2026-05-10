@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Models · MakeTrack{% endblock %}
+{% block title %}Models · maketrack{% endblock %}
 
 {% macro view_url(target_view) -%}
 ?view={{ target_view }}{% if hide_project_models %}&hide_project_models=true{% endif %}{% if tag %}&tag={{ tag }}{% endif %}{% if q %}&q={{ q }}{% endif %}
@@ -29,7 +29,7 @@
   </div>
   <form method="post" action="/models/new">
     <button type="submit"
-            class="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500">
+            class="rounded-md bg-crimson px-4 py-2 text-sm font-medium text-white hover:bg-crimson">
       + New model
     </button>
   </form>
@@ -52,7 +52,7 @@
       {% if hide_project_models %}<input type="hidden" name="hide_project_models" value="true">{% endif %}
       {% if tag %}<input type="hidden" name="tag" value="{{ tag }}">{% endif %}
       <input type="search" name="q" value="{{ q }}" placeholder="search models…"
-             class="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+             class="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 focus:border-crimson focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white">
     </form>
     <a href="{{ filter_url() }}"
        class="rounded px-3 py-1 text-xs {% if hide_project_models %}bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300{% else %}text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white{% endif %}">
@@ -77,7 +77,7 @@
     {% if q %}
       No matches for "<span class="font-mono">{{ q }}</span>".
       <a href="/models?view={{ view }}{% if hide_project_models %}&hide_project_models=true{% endif %}"
-         class="text-emerald-600 hover:text-emerald-500 dark:text-emerald-400">Clear search</a>.
+         class="text-crimson hover:text-crimson dark:text-crimson">Clear search</a>.
     {% elif hide_project_models %}
       All your models are scoped to projects. Toggle the filter off to see them.
     {% else %}
@@ -90,7 +90,7 @@
     {% for it in items %}
       {% set m = it.model %}
       <a href="/models/{{ m.id }}"
-         class="group block overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:border-emerald-500 hover:shadow dark:border-slate-800 dark:bg-slate-900 dark:hover:border-emerald-700">
+         class="group block overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:border-crimson hover:shadow dark:border-slate-800 dark:bg-slate-900 dark:hover:border-crimson">
         <div class="aspect-square w-full bg-slate-100 dark:bg-slate-950">
           {% if it.thumbnail_path %}
             <img src="/media/{{ it.thumbnail_path }}" alt="" class="h-full w-full object-cover">
@@ -118,7 +118,7 @@
           {% if it.tags %}
             <div class="mt-2 flex flex-wrap gap-1">
               {% for t in it.tags %}
-                <span class="rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">{{ t }}</span>
+                <span class="rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-800 dark:bg-emerald-900/40 dark:text-crimson">{{ t }}</span>
               {% endfor %}
             </div>
           {% endif %}
@@ -161,7 +161,7 @@
             </td>
             <td class="px-3 py-2 font-medium">
               <div class="flex items-center gap-2">
-                <a href="/models/{{ m.id }}" class="text-slate-900 hover:text-emerald-600 dark:text-white dark:hover:text-emerald-300">{{ m.name }}</a>
+                <a href="/models/{{ m.id }}" class="text-slate-900 hover:text-crimson dark:text-white dark:hover:text-crimson">{{ m.name }}</a>
                 {{ project_chip(it) }}
               </div>
             </td>
@@ -189,7 +189,7 @@
               {% if it.tags %}
                 <div class="flex flex-wrap gap-1">
                   {% for t in it.tags %}
-                    <span class="rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">{{ t }}</span>
+                    <span class="rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-800 dark:bg-emerald-900/40 dark:text-crimson">{{ t }}</span>
                   {% endfor %}
                 </div>
               {% else %}

@@ -1,4 +1,7 @@
-# MakeTrack
+<p align="left">
+  <img src="src/maketrack/static/brand/maketrack-wordmark.svg#gh-light-mode-only" alt="maketrack" height="56">
+  <img src="src/maketrack/static/brand/maketrack-wordmark-dark.svg#gh-dark-mode-only" alt="maketrack" height="56">
+</p>
 
 Self-hosted 3D printing project tracker with inventory, filament, and pluggable external filament sources (Spoolman first).
 
@@ -8,7 +11,7 @@ See [`CLAUDE.md`](./CLAUDE.md) for the full project spec, data model, and roadma
 
 ## Status
 
-Pre-release. M1–M7 complete (skeleton, DB, filaments+sources, inventory+printers, models+assets, projects+BOM, MCP server). M8 polish is the remaining milestone.
+v0.1.0 cut. Detail pages share a read/edit toggle, the create flow drops you straight into edit mode on a draft stub, and all entities (projects, models, printers, filaments, inventory, locations) are reachable through the UI and a read-only MCP server.
 
 ## Quickstart (dev)
 

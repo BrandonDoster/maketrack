@@ -1,24 +1,24 @@
 {% extends "base.html" %}
 
-{% block title %}External sources · MakeTrack{% endblock %}
+{% block title %}External sources · maketrack{% endblock %}
 
 {% block content %}
 <header class="mb-6 flex items-end justify-between">
   <div>
-    <a href="/settings" class="text-sm text-slate-500 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400">← Settings</a>
+    <a href="/settings" class="text-sm text-slate-500 hover:text-crimson dark:text-slate-400 dark:hover:text-crimson">← Settings</a>
     <h1 class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">External sources</h1>
     <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
-      Filament sources synced into MakeTrack. Spoolman is the only adapter today.
+      Filament sources synced into maketrack. Spoolman is the only adapter today.
     </p>
   </div>
   <a href="/settings/sources/new"
-     class="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500">
+     class="rounded-md bg-crimson px-4 py-2 text-sm font-medium text-white hover:bg-crimson">
     + Add source
   </a>
 </header>
 
 {% if last_sync_result %}
-  <div class="mb-4 rounded border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-200">
+  <div class="mb-4 rounded border border-crimson bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-crimson dark:bg-emerald-950/30 dark:text-emerald-200">
     Sync {{ last_sync_result.outcome }}: {{ last_sync_result.rows_upserted }} upserted, {{ last_sync_result.rows_archived }} archived.
     {% if last_sync_result.error %}<span class="text-rose-700 dark:text-rose-200">Error: {{ last_sync_result.error }}</span>{% endif %}
   </div>
@@ -49,7 +49,7 @@
         </td>
         <td class="px-4 py-3">
           {% if s.enabled %}
-            <span class="rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300">enabled</span>
+            <span class="rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800 dark:bg-emerald-900/50 dark:text-crimson">enabled</span>
           {% else %}
             <span class="rounded bg-slate-200 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-400">disabled</span>
           {% endif %}
@@ -59,10 +59,10 @@
         </td>
         <td class="px-4 py-3 text-right">
           <form method="post" action="/settings/sources/{{ s.id }}/sync" class="inline">
-            <button class="text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300">Sync now</button>
+            <button class="text-crimson hover:text-crimson dark:text-crimson dark:hover:text-crimson">Sync now</button>
           </form>
           <span class="text-slate-400 dark:text-slate-700"> · </span>
-          <a href="/settings/sources/{{ s.id }}/edit" class="text-slate-600 hover:text-emerald-600 dark:text-slate-300 dark:hover:text-emerald-300">Edit</a>
+          <a href="/settings/sources/{{ s.id }}/edit" class="text-slate-600 hover:text-crimson dark:text-slate-300 dark:hover:text-crimson">Edit</a>
         </td>
       </tr>
       {% else %}

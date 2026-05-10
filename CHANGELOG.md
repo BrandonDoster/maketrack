@@ -523,3 +523,42 @@ same detail-page shape.
   stay-in-edit-mode redirect semantics across all sub-actions,
   the row click on the models details view, and the active-state
   styling of the Done editing button.
+
+### Brand identity rollout
+Applies the `maketrack-brand` skill spec across the UI. Source of
+truth for every color / typography / logo decision lives at
+`.claude/skills/maketrack-brand/SKILL.md` (per-user, gitignored).
+
+- **Wordmark.** All user-visible spellings of "MakeTrack" (camelCase)
+  are now `maketrack` (lowercase, one word). Covers page titles,
+  the FastAPI app title, the README header, and the project spec.
+  CHANGELOG history left untouched.
+- **Logo in nav.** The text "MakeTrack" link is replaced by the
+  wordmark SVG (`maketrack-wordmark.svg` for light mode, plus a
+  generated `maketrack-wordmark-dark.svg` that recolors the
+  slate-ink "make" text to bone for dark backgrounds — both fills
+  stay inside the four-token palette).
+- **Brand assets shipped.** All variants from the skill copied to
+  `src/maketrack/static/brand/` so they're bundled in the image:
+  icon (transparent), icon-on-bone, icon-on-slate, wordmark,
+  wordmark-dark, stacked lockup (with + without tagline), and
+  mono variants in crimson / slate / reverse.
+- **Favicon.** SVG favicon added (`/static/brand/maketrack-icon.svg`).
+- **Tailwind tokens.** `crimson`, `slate-ink`, `bone`, `steel`
+  added as named utilities in `tailwind.config.js`, plus the same
+  config inlined in the CDN-fallback path of `base.html` so dev
+  mode without the compiled stylesheet still renders correctly.
+- **Primary accent flips emerald → crimson.** All 113 accent-shaded
+  emerald uses in templates (shades 300/400/500/600/700) become
+  the single brand `crimson`, with hover states using `/90` opacity.
+  Semantic status-chip shades (emerald-100/200/800/900 for "done" /
+  "printed" indicators) are kept per the brand spec's allowance for
+  derived semantic colors as functional UI.
+- **Typography.** `font-family` updated to put Inter first across
+  the body and as the Tailwind sans default. JetBrains Mono added
+  as the mono default. Self-hosted Inter / JetBrains Mono WOFF2
+  files are not bundled yet — system fallback handles it for v1
+  (the brand spec permits a system fallback when Inter can't load).
+- 257 tests still pass. Updated the two that asserted on old brand
+  tokens (`MakeTrack` and `bg-emerald-600` in the dashboard / Done
+  editing tests).
