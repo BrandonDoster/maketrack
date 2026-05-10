@@ -90,6 +90,85 @@ async def test_in_projects_column_shows_names(client: AsyncClient) -> None:
     assert "Voron" in resp.text
 
 
+async def test_details_view_renders_actual_tag_text(client: AsyncClient) -> None:
+    """Regression: tags should appear in the details view's Tags column."""
+    await client.post(
+        "/api/models", json={"name": "Tagged", "tags": ["voron", "filter"]}
+    )
+    resp = await client.get("/models?view=details")
+    assert resp.status_code == 200
+    assert "voron" in resp.text
+    assert "filter" in resp.text
+
+
+async def test_details_view_shows_project_chip_on_name(client: AsyncClient) -> None:
+    """Each row in details should clearly show whether the model is in
+    a project, regardless of whether it has user-added tags."""
+    proj = (await client.post("/api/projects", json={"name": "Voron Build"})).json()["id"]
+    m = (await client.post("/api/models", json={"name": "BedFoot"})).json()["id"]
+    await client.post(f"/api/projects/{proj}/models", json={"model_id": m})
+
+    resp = await client.get("/models?view=details")
+    assert "in 1 project" in resp.text
+
+
+async def test_save_preferences_sets_cookies(client: AsyncClient) -> None:
+    resp = await client.post(
+        "/models/preferences",
+        data={"view": "details", "hide_project_models": "true"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    set_cookie = resp.headers.get("set-cookie", "")
+    assert "maketrack_models_view=details" in set_cookie
+    assert "maketrack_models_hide_project_models=true" in set_cookie
+
+
+async def test_cookies_become_default_for_models_list(client: AsyncClient) -> None:
+    """After saving prefs, an unparam'd /models GET picks up the cookie
+    defaults (so the user lands on details + filtered automatically)."""
+    await client.post("/api/models", json={"name": "Library"})
+    proj = (await client.post("/api/projects", json={"name": "Voron"})).json()["id"]
+    in_proj = (await client.post("/api/models", json={"name": "Bracket"})).json()["id"]
+    await client.post(f"/api/projects/{proj}/models", json={"model_id": in_proj})
+
+    # Initial visit — defaults to cards + no filter, both models visible.
+    initial = await client.get("/models")
+    assert "grid grid-cols-1" in initial.text  # cards layout
+    assert "Library" in initial.text
+    assert "Bracket" in initial.text
+
+    # Save details + hide_project_models as defaults.
+    await client.post(
+        "/models/preferences",
+        data={"view": "details", "hide_project_models": "true"},
+        follow_redirects=False,
+    )
+
+    # Subsequent unparam'd visit picks up the saved defaults.
+    after = await client.get("/models")
+    assert '<th class="px-3 py-2">In projects</th>' in after.text  # details layout
+    assert "Library" in after.text  # standalone visible
+    assert "Bracket" not in after.text  # project-scoped hidden by saved filter
+
+    # Explicit ?view= still wins over the cookie (so the user can poke
+    # other views without losing their saved default).
+    override = await client.get("/models?view=cards")
+    assert "grid grid-cols-1" in override.text
+
+
+async def test_save_preferences_handles_invalid_view(client: AsyncClient) -> None:
+    resp = await client.post(
+        "/models/preferences",
+        data={"view": "spreadsheet", "hide_project_models": "false"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    set_cookie = resp.headers.get("set-cookie", "")
+    # Falls back to 'cards' rather than persisting nonsense.
+    assert "maketrack_models_view=cards" in set_cookie
+
+
 async def test_empty_after_filter_shows_useful_message(client: AsyncClient) -> None:
     # All models linked to a project; filtering them out leaves nothing.
     proj = (await client.post("/api/projects", json={"name": "P"})).json()["id"]

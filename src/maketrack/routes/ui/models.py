@@ -28,31 +28,67 @@ def _parse_tags(raw: str | None) -> list[str]:
 
 
 _VALID_MODEL_VIEWS = ("cards", "details", "list")
+_VIEW_COOKIE = "maketrack_models_view"
+_HIDE_COOKIE = "maketrack_models_hide_project_models"
+
+
+def _resolve_view(query_view: str | None, request: Request) -> str:
+    """Pick the view: explicit ?view= wins, then cookie, then 'cards'."""
+    if query_view in _VALID_MODEL_VIEWS:
+        return query_view
+    cookie = request.cookies.get(_VIEW_COOKIE)
+    if cookie in _VALID_MODEL_VIEWS:
+        return cookie
+    return "cards"
+
+
+def _resolve_hide(query_hide: bool | None, request: Request) -> bool:
+    """Same precedence as _resolve_view, default off."""
+    if query_hide is not None:
+        return query_hide
+    return request.cookies.get(_HIDE_COOKIE) == "true"
 
 
 @router.get("/models", response_class=HTMLResponse)
 async def list_page(
     request: Request,
     session: SessionDep,
-    view: str = "cards",
-    hide_project_models: bool = False,
+    view: str | None = None,
+    hide_project_models: bool | None = None,
     tag: str | None = None,
 ) -> HTMLResponse:
-    if view not in _VALID_MODEL_VIEWS:
-        view = "cards"
-    items = await svc.list_models_with_context(
-        session, tag=tag, hide_project_models=hide_project_models
-    )
+    view = _resolve_view(view, request)
+    hide_resolved = _resolve_hide(hide_project_models, request)
+    items = await svc.list_models_with_context(session, tag=tag, hide_project_models=hide_resolved)
     return templates.TemplateResponse(
         request,
         "models/list.html",
         {
             "items": items,
             "view": view,
-            "hide_project_models": hide_project_models,
+            "hide_project_models": hide_resolved,
             "tag": tag,
         },
     )
+
+
+@router.post("/models/preferences", response_class=HTMLResponse)
+async def save_preferences(request: Request) -> HTMLResponse:
+    """Persist the current view + filter as cookies so /models with no
+    query params uses these as the default. The user controls when to
+    save (explicit button) so experimenting with views doesn't clobber
+    their default.
+    """
+    form = await request.form()
+    view = form.get("view", "cards")
+    if view not in _VALID_MODEL_VIEWS:
+        view = "cards"
+    hide = form.get("hide_project_models") in ("true", "on", "1")
+    response = RedirectResponse(url="/models", status_code=status.HTTP_303_SEE_OTHER)
+    one_year = 60 * 60 * 24 * 365
+    response.set_cookie(_VIEW_COOKIE, view, max_age=one_year, samesite="lax")
+    response.set_cookie(_HIDE_COOKIE, "true" if hide else "false", max_age=one_year, samesite="lax")
+    return response
 
 
 @router.get("/models/new", response_class=HTMLResponse)

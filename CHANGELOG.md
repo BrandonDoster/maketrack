@@ -257,3 +257,22 @@ All notable changes to this project will be documented here. Format roughly foll
   render their distinctive markup; "in 1 project" chip appears on
   project-linked models; `hide_project_models=true` collapses the
   list to just the standalone library model. 152 tests pass.
+
+### Models list — tags visible in details + saveable defaults
+- Bumped the tag/format chip font from `text-[10px]` (an arbitrary
+  Tailwind value at risk of being culled by the CLI build) to the
+  standard `text-xs` so chips render reliably in the static build.
+- Added the "in N project(s)" chip to the Name column in details view
+  so each row shows project membership at a glance regardless of
+  user-added tags. Empty Tags cell now renders an em-dash placeholder.
+- New "Save as default" button on the toolbar — persists the current
+  view + filter as cookies (`maketrack_models_view`,
+  `maketrack_models_hide_project_models`) so subsequent visits to
+  `/models` with no query params open with those settings. Explicit
+  `?view=` query params still win, so the user can poke other views
+  without losing their saved default. New `POST /models/preferences`
+  validates the value, falls back to `cards` for unknown views.
+- Verified end-to-end: details view rendered `voron` + `filter` chips,
+  Tags column header, and the "in 1 project" chip; saving prefs set
+  both cookies; follow-up unparam'd GET landed on details view with
+  the filter active and the project-scoped row hidden. 157 tests pass.
