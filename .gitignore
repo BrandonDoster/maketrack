@@ -34,7 +34,13 @@ maketrack.db-shm
 
 # Spoolman dev container data (kept out of git, mounted via compose)
 /data/
+/spoolman-data/
+/maketrack-data/
+/maketrack-uploads/
 
 # Tailwind build artifacts
 src/maketrack/static/tailwind.css
 node_modules/
+
+# Per-user Claude Code config (settings, skills). Not part of the project.
+.claude/
