@@ -19,6 +19,7 @@ from maketrack.schemas.project import (
     ProjectCreate,
     ProjectFilamentLinkCreate,
     ProjectItemLinkCreate,
+    ProjectItemLinkUpdate,
     ProjectModelLinkCreate,
     ProjectUpdate,
 )
@@ -337,6 +338,53 @@ async def remove_item(project_id: int, link_id: int, session: SessionDep) -> HTM
         await session.commit()
     except NotFoundError:
         pass
+    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/projects/{project_id}/items/{link_id}/qty", response_class=HTMLResponse)
+async def update_item_qty(
+    project_id: int, link_id: int, request: Request, session: SessionDep
+) -> HTMLResponse:
+    """Inline qty edit: tiny per-row form auto-submits on change.
+
+    Accepts qty_required and/or qty_consumed; missing fields are left
+    untouched. Bad input redirects without saving — the user just sees
+    the previous value.
+    """
+    form = await request.form()
+    payload_data: dict[str, float] = {}
+    for field in ("qty_required", "qty_consumed"):
+        raw = (form.get(field) or "").strip()
+        if not raw:
+            continue
+        try:
+            value = float(raw)
+        except ValueError:
+            continue
+        if value < 0:
+            continue
+        payload_data[field] = value
+    if payload_data:
+        try:
+            await link_svc.update_item_link(session, link_id, ProjectItemLinkUpdate(**payload_data))
+            await session.commit()
+        except NotFoundError:
+            pass
+    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+# ── inline notes edit ─────────────────────────────────────────────────────
+
+
+@router.post("/projects/{project_id}/notes", response_class=HTMLResponse)
+async def update_notes(project_id: int, request: Request, session: SessionDep) -> HTMLResponse:
+    """Quick journal-style notes update from the detail page."""
+    form = await request.form()
+    notes = form.get("notes")
+    # Empty string clears the notes; None should also collapse to NULL.
+    cleaned = notes.strip() if isinstance(notes, str) else None
+    await svc.update_project(session, project_id, ProjectUpdate(notes=cleaned or None))
+    await session.commit()
     return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 

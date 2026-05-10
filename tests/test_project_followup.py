@@ -211,3 +211,139 @@ async def test_unknown_photo_kind_is_a_noop(client: AsyncClient) -> None:
     )
     # Redirects without persisting (unknown slot is rejected silently).
     assert resp.status_code == 303
+
+
+# ── M6 polish: cover photo on list, inline qty, inline notes ──────────────
+
+
+async def test_project_list_renders_cover_photo(client: AsyncClient) -> None:
+    project = await client.post("/api/projects", json={"name": "Cover Test"})
+    pid = project.json()["id"]
+    await client.post(
+        f"/projects/{pid}/photo/cover",
+        files={"file": ("c.png", io.BytesIO(_PNG), "image/png")},
+        follow_redirects=False,
+    )
+
+    resp = await client.get("/projects")
+    assert resp.status_code == 200
+    import re
+
+    match = re.search(r"/media/projects/[a-f0-9]+\.png", resp.text)
+    assert match, "cover photo URL not found in /projects page"
+
+
+async def test_inline_qty_required_save(client: AsyncClient) -> None:
+    project = await client.post("/api/projects", json={"name": "P"})
+    pid = project.json()["id"]
+    inv = await client.post("/api/inventory", json={"name": "Bolt", "quantity": 0})
+    iid = inv.json()["id"]
+    add = await client.post(
+        f"/api/projects/{pid}/items",
+        json={"inventory_item_id": iid, "qty_required": 10},
+    )
+    link_id = add.json()["id"]
+
+    resp = await client.post(
+        f"/projects/{pid}/items/{link_id}/qty",
+        data={"qty_required": "25"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+
+    bom = (await client.get(f"/api/projects/{pid}/bom")).json()
+    assert bom[0]["still_needed_for_project"] == 25
+
+
+async def test_inline_qty_consumed_save(client: AsyncClient) -> None:
+    project = await client.post("/api/projects", json={"name": "P"})
+    pid = project.json()["id"]
+    inv = await client.post("/api/inventory", json={"name": "Bolt", "quantity": 100})
+    iid = inv.json()["id"]
+    add = await client.post(
+        f"/api/projects/{pid}/items",
+        json={"inventory_item_id": iid, "qty_required": 10},
+    )
+    link_id = add.json()["id"]
+
+    await client.post(
+        f"/projects/{pid}/items/{link_id}/qty",
+        data={"qty_consumed": "4"},
+        follow_redirects=False,
+    )
+    bom = (await client.get(f"/api/projects/{pid}/bom")).json()
+    assert bom[0]["still_needed_for_project"] == 6  # 10 - 4
+
+
+async def test_inline_qty_invalid_input_is_ignored(client: AsyncClient) -> None:
+    project = await client.post("/api/projects", json={"name": "P"})
+    pid = project.json()["id"]
+    inv = await client.post("/api/inventory", json={"name": "Bolt"})
+    iid = inv.json()["id"]
+    add = await client.post(
+        f"/api/projects/{pid}/items",
+        json={"inventory_item_id": iid, "qty_required": 10},
+    )
+    link_id = add.json()["id"]
+
+    resp = await client.post(
+        f"/projects/{pid}/items/{link_id}/qty",
+        data={"qty_required": "not-a-number"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+
+    bom = (await client.get(f"/api/projects/{pid}/bom")).json()
+    assert bom[0]["still_needed_for_project"] == 10  # unchanged
+
+
+async def test_inline_notes_save(client: AsyncClient) -> None:
+    project = await client.post("/api/projects", json={"name": "P"})
+    pid = project.json()["id"]
+
+    resp = await client.post(
+        f"/projects/{pid}/notes",
+        data={"notes": "ordered the heatsets, ETA Friday"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+
+    fetched = (await client.get(f"/api/projects/{pid}")).json()
+    assert fetched["notes"] == "ordered the heatsets, ETA Friday"
+
+
+async def test_inline_notes_clears_on_empty(client: AsyncClient) -> None:
+    project = await client.post("/api/projects", json={"name": "P"})
+    pid = project.json()["id"]
+    await client.post(
+        f"/projects/{pid}/notes",
+        data={"notes": "first pass"},
+        follow_redirects=False,
+    )
+    await client.post(
+        f"/projects/{pid}/notes",
+        data={"notes": "   "},
+        follow_redirects=False,
+    )
+    fetched = (await client.get(f"/api/projects/{pid}")).json()
+    assert fetched["notes"] is None
+
+
+async def test_detail_page_renders_inline_widgets(client: AsyncClient) -> None:
+    """The detail page should show qty inputs (not just text) and a notes textarea."""
+    project = await client.post("/api/projects", json={"name": "Widgets"})
+    pid = project.json()["id"]
+    inv = await client.post("/api/inventory", json={"name": "Bolt"})
+    iid = inv.json()["id"]
+    await client.post(
+        f"/api/projects/{pid}/items",
+        json={"inventory_item_id": iid, "qty_required": 5},
+    )
+
+    detail = await client.get(f"/projects/{pid}")
+    assert detail.status_code == 200
+    # The inline qty form posts to the qty endpoint per row.
+    assert f"/projects/{pid}/items/" in detail.text
+    assert "/qty" in detail.text
+    # Notes form action is present.
+    assert f'action="/projects/{pid}/notes"' in detail.text

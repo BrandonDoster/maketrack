@@ -38,22 +38,36 @@
   {% for it in items %}
     {% set p = it.project %}
     {% set chip = status_colors.get(p.status, ('bg-slate-200 text-slate-700', 'bg-slate-800 text-slate-400')) %}
+    {# Prefer cover, fall back to completed photo so a finished project still
+       shows something visual until the user decides to set a "cover". #}
+    {% set photo = p.cover_photo_path or p.completed_photo_path %}
     <a href="/projects/{{ p.id }}"
-       class="block rounded-lg border border-slate-200 bg-white p-5 hover:border-emerald-500 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-emerald-700">
-      <div class="flex items-start justify-between">
-        <h2 class="text-lg font-semibold text-slate-900 dark:text-white">{{ p.name }}</h2>
-        <span class="rounded px-2 py-0.5 text-xs {{ chip[0] }} dark:{{ chip[1] }}">{{ p.status }}</span>
+       class="block overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:border-emerald-500 hover:shadow dark:border-slate-800 dark:bg-slate-900 dark:hover:border-emerald-700">
+      <div class="aspect-video w-full bg-slate-100 dark:bg-slate-950">
+        {% if photo %}
+          <img src="/media/{{ photo }}" alt="" class="h-full w-full object-cover">
+        {% else %}
+          <div class="flex h-full w-full items-center justify-center text-xs text-slate-400 dark:text-slate-600">
+            no cover photo
+          </div>
+        {% endif %}
       </div>
-      {% if p.description %}
-        <p class="mt-2 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">{{ p.description }}</p>
-      {% endif %}
-      {% if it.tags %}
-        <div class="mt-3 flex flex-wrap gap-1">
-          {% for tag in it.tags %}
-            <span class="rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">{{ tag }}</span>
-          {% endfor %}
+      <div class="p-5">
+        <div class="flex items-start justify-between gap-2">
+          <h2 class="truncate text-lg font-semibold text-slate-900 dark:text-white">{{ p.name }}</h2>
+          <span class="shrink-0 rounded px-2 py-0.5 text-xs {{ chip[0] }} dark:{{ chip[1] }}">{{ p.status }}</span>
         </div>
-      {% endif %}
+        {% if p.description %}
+          <p class="mt-2 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">{{ p.description }}</p>
+        {% endif %}
+        {% if it.tags %}
+          <div class="mt-3 flex flex-wrap gap-1">
+            {% for tag in it.tags %}
+              <span class="rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">{{ tag }}</span>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
     </a>
   {% else %}
     <div class="col-span-full rounded-lg border border-dashed border-slate-300 p-12 text-center text-slate-500 dark:border-slate-800">

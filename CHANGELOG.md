@@ -146,3 +146,18 @@ All notable changes to this project will be documented here. Format roughly foll
   inventory item flipped the same row to `on_hand=20 still_to_buy=30`;
   cover photo round-tripped via `/media/projects/<uuid>.png`; shopping
   list rendered linked + unlinked rows together. 119 tests pass.
+
+### M6 polish (second feedback round)
+- Project list cards show the cover photo (or completed photo if no
+  cover) so a grid of in-flight projects is scannable visually.
+- BOM rows have inline number inputs for qty_required and qty_consumed
+  that auto-submit on change (`onchange="this.form.submit()"`). Bad
+  input is silently ignored — the input snaps back to the saved value
+  on the next render.
+- Project notes are now an inline textarea + Save form on the detail
+  page so progress journaling doesn't require navigating to /edit.
+  Empty/whitespace-only saves clear the column to NULL.
+- Verified end-to-end: cover image rendered on `/projects` cards;
+  inline qty edit `required=80, consumed=15` → BOM `still_needed=65,
+  still_to_buy=55`; inline notes saved and round-tripped through the
+  detail page. 126 tests pass.
