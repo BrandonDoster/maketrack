@@ -19,6 +19,7 @@ dependencies = [
     "httpx>=0.28",
     "structlog>=24.4",
     "apscheduler>=3.11",
+    "mcp>=1.27.1",
 ]
 
 [project.urls]

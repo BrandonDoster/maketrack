@@ -276,3 +276,30 @@ All notable changes to this project will be documented here. Format roughly foll
   Tags column header, and the "in 1 project" chip; saving prefs set
   both cookies; follow-up unparam'd GET landed on details view with
   the filter active and the project-scoped row hidden. 157 tests pass.
+
+### M7 — MCP server
+- New `mcp` Python dep; package skeleton at `src/maketrack/mcp/`.
+- `FastMCP` server exposes 11 tools — 8 read + 3 write — backed by the
+  existing async services so the LLM client and the web UI see the
+  same data:
+  - **read**: `list_projects`, `get_project` (with linked
+    models/filaments/items/printer), `list_models`, `get_model`
+    (with assets), `list_filaments`, `find_filament_for_project`
+    (returns `coverage` of `'covered' | 'short' | 'unknown'` per
+    project_filament), `project_shopping_list` (per project or
+    aggregated across active projects), `list_printers`,
+    `list_inventory`.
+  - **write** (scoped per CLAUDE.md): `create_model`,
+    `upload_model_asset` (base64 content, asset_type inferred from
+    filename, 3MF embedded thumbnails extracted automatically),
+    `set_model_thumbnail`.
+- `serializers.py` keeps the ORM↔dict conversion in one place so each
+  tool's payload shape is consistent.
+- `python -m maketrack.mcp` runs the streamable-http transport,
+  defaults to `--host 127.0.0.1 --port 8001`. No auth — same single
+  user assumption as the web app, scoped to localhost.
+- Migrations bootstrap on startup the same way the web app does.
+- Tests call the tool functions directly (FastMCP's `@tool()`
+  decorator returns the function unchanged) — covers happy path +
+  error cases for all 11 tools.
+- README updated with the run command + tool table. 171 tests pass.

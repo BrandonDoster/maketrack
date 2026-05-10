@@ -92,9 +92,7 @@ async def test_in_projects_column_shows_names(client: AsyncClient) -> None:
 
 async def test_details_view_renders_actual_tag_text(client: AsyncClient) -> None:
     """Regression: tags should appear in the details view's Tags column."""
-    await client.post(
-        "/api/models", json={"name": "Tagged", "tags": ["voron", "filter"]}
-    )
+    await client.post("/api/models", json={"name": "Tagged", "tags": ["voron", "filter"]})
     resp = await client.get("/models?view=details")
     assert resp.status_code == 200
     assert "voron" in resp.text
