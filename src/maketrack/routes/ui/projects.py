@@ -16,7 +16,6 @@ from maketrack.routes.ui._forms import (
     format_validation_error,
     is_htmx,
     null_empty_strings,
-    strip_empty_strings,
 )
 from maketrack.schemas.model import ModelCreate
 from maketrack.schemas.project import (
@@ -43,6 +42,8 @@ from maketrack.templating import templates
 
 router = APIRouter(tags=["ui-projects"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
+DRAFT_PROJECT_NAME = "New project"
 
 
 def _parse_tags(raw: str | None) -> list[str]:
@@ -78,54 +79,27 @@ async def list_page(
     )
 
 
-@router.get("/projects/new", response_class=HTMLResponse)
-async def new_form(request: Request, session: SessionDep) -> HTMLResponse:
-    printers = (await session.execute(select(Printer).order_by(Printer.name))).scalars().all()
-    return templates.TemplateResponse(
-        request,
-        "projects/form.html",
-        {
-            "project": None,
-            "tags_str": "",
-            "printers": printers,
-            "errors": None,
-            "statuses": PROJECT_STATUSES,
-        },
+@router.post("/projects/new", response_class=HTMLResponse)
+async def create_draft(session: SessionDep) -> HTMLResponse:
+    """Create a stub project and drop the user on its detail page in edit
+    mode. Replaces the standalone create-project form."""
+    project = await svc.create_project(session, ProjectCreate(name=DRAFT_PROJECT_NAME))
+    await session.commit()
+    return RedirectResponse(
+        url=f"/projects/{project.id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
     )
 
 
-@router.post("/projects", response_class=HTMLResponse)
-async def create(request: Request, session: SessionDep) -> HTMLResponse:
-    form = strip_empty_strings(dict(await request.form()))
-    tags = _parse_tags(form.pop("tags", None))
-    if "printer_id" in form:
-        try:
-            form["printer_id"] = int(form["printer_id"])
-        except (TypeError, ValueError):
-            form.pop("printer_id", None)
-    try:
-        payload = ProjectCreate(**form, tags=tags)
-    except ValidationError as exc:
-        printers = (await session.execute(select(Printer).order_by(Printer.name))).scalars().all()
-        return templates.TemplateResponse(
-            request,
-            "projects/form.html",
-            {
-                "project": None,
-                "tags_str": ", ".join(tags),
-                "printers": printers,
-                "errors": [format_validation_error(e) for e in exc.errors()],
-                "statuses": PROJECT_STATUSES,
-            },
-            status_code=status.HTTP_400_BAD_REQUEST,
-        )
-    project = await svc.create_project(session, payload)
-    await session.commit()
-    return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
-
-
-@router.get("/projects/{project_id}", response_class=HTMLResponse)
-async def detail_page(project_id: int, request: Request, session: SessionDep) -> HTMLResponse:
+async def _render_detail(
+    request: Request,
+    session: AsyncSession,
+    project_id: int,
+    *,
+    edit_mode: bool,
+    errors: list[str] | None = None,
+    tags_override: list[str] | None = None,
+    status_code: int = status.HTTP_200_OK,
+) -> HTMLResponse:
     project = await svc.get_project(session, project_id)
     printer = await link_svc.get_printer_for_project(session, project)
     project_models = await link_svc.list_project_models(session, project_id)
@@ -133,26 +107,38 @@ async def detail_page(project_id: int, request: Request, session: SessionDep) ->
     project_items = await link_svc.list_project_items(session, project_id)
     bom = await bom_svc.project_bom(session, project_id)
 
-    available_models = await link_svc.list_unlinked_models(session, project_id)
-    available_filaments = (
-        (
-            await session.execute(
-                select(Filament).where(Filament.archived_at.is_(None)).order_by(Filament.name)
+    available_models: list = []
+    available_filaments: list = []
+    available_items: list = []
+    printers: list = []
+    if edit_mode:
+        available_models = list(await link_svc.list_unlinked_models(session, project_id))
+        available_filaments = list(
+            (
+                await session.execute(
+                    select(Filament).where(Filament.archived_at.is_(None)).order_by(Filament.name)
+                )
             )
+            .scalars()
+            .all()
         )
-        .scalars()
-        .all()
-    )
-    available_items = (
-        (await session.execute(select(InventoryItem).order_by(InventoryItem.name))).scalars().all()
-    )
+        available_items = list(
+            (await session.execute(select(InventoryItem).order_by(InventoryItem.name)))
+            .scalars()
+            .all()
+        )
+        printers = list(
+            (await session.execute(select(Printer).order_by(Printer.name))).scalars().all()
+        )
 
+    tags = tags_override if tags_override is not None else svc.decode_tags(project.tags)
     return templates.TemplateResponse(
         request,
         "projects/detail.html",
         {
             "project": project,
-            "tags": svc.decode_tags(project.tags),
+            "tags": tags,
+            "tags_str": ", ".join(tags),
             "printer": printer,
             "project_models": project_models,
             "project_filaments": project_filaments,
@@ -161,35 +147,40 @@ async def detail_page(project_id: int, request: Request, session: SessionDep) ->
             "available_models": available_models,
             "available_filaments": available_filaments,
             "available_items": available_items,
-            "statuses": PROJECT_STATUSES,
-        },
-    )
-
-
-@router.get("/projects/{project_id}/edit", response_class=HTMLResponse)
-async def edit_form(project_id: int, request: Request, session: SessionDep) -> HTMLResponse:
-    project = await svc.get_project(session, project_id)
-    printers = (await session.execute(select(Printer).order_by(Printer.name))).scalars().all()
-    return templates.TemplateResponse(
-        request,
-        "projects/form.html",
-        {
-            "project": project,
-            "tags_str": ", ".join(svc.decode_tags(project.tags)),
             "printers": printers,
-            "errors": None,
             "statuses": PROJECT_STATUSES,
+            "edit_mode": edit_mode,
+            "errors": errors,
         },
+        status_code=status_code,
     )
+
+
+@router.get("/projects/{project_id}", response_class=HTMLResponse)
+async def detail_page(
+    project_id: int,
+    request: Request,
+    session: SessionDep,
+    edit: bool = False,
+) -> HTMLResponse:
+    return await _render_detail(request, session, project_id, edit_mode=edit)
 
 
 @router.post("/projects/{project_id}", response_class=HTMLResponse)
 async def update(project_id: int, request: Request, session: SessionDep) -> HTMLResponse:
-    # Update path: use null_empty_strings so a cleared description / notes
-    # field actually clears the column instead of getting silently dropped.
-    form = null_empty_strings(dict(await request.form()))
+    raw_form = dict(await request.form())
+    if not (raw_form.get("name") or "").strip():
+        return await _render_detail(
+            request,
+            session,
+            project_id,
+            edit_mode=True,
+            errors=["Name is required."],
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    form = null_empty_strings(raw_form)
     tags = _parse_tags(form.pop("tags", None))
-    # printer_id arrives as a string from <select>; coerce to int when set.
     if form.get("printer_id") is not None:
         try:
             form["printer_id"] = int(form["printer_id"])
@@ -198,22 +189,18 @@ async def update(project_id: int, request: Request, session: SessionDep) -> HTML
     try:
         payload = ProjectUpdate(**form, tags=tags)
     except ValidationError as exc:
-        project = await svc.get_project(session, project_id)
-        printers = (await session.execute(select(Printer).order_by(Printer.name))).scalars().all()
-        return templates.TemplateResponse(
+        return await _render_detail(
             request,
-            "projects/form.html",
-            {
-                "project": project,
-                "tags_str": ", ".join(tags),
-                "printers": printers,
-                "errors": [format_validation_error(e) for e in exc.errors()],
-                "statuses": PROJECT_STATUSES,
-            },
+            session,
+            project_id,
+            edit_mode=True,
+            errors=[format_validation_error(e) for e in exc.errors()],
+            tags_override=tags,
             status_code=status.HTTP_400_BAD_REQUEST,
         )
     await svc.update_project(session, project_id, payload)
     await session.commit()
+    # "Done editing" submits this form, so saving exits edit mode.
     return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -223,11 +210,13 @@ async def transition_status(project_id: int, request: Request, session: SessionD
     new_status = form.get("status")
     if new_status not in PROJECT_STATUSES:
         return RedirectResponse(
-            url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER
+            url=f"/projects/{project_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
         )
     await svc.update_project(session, project_id, ProjectUpdate(status=new_status))
     await session.commit()
-    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        url=f"/projects/{project_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
+    )
 
 
 @router.post("/projects/{project_id}/delete", response_class=HTMLResponse)
@@ -241,7 +230,8 @@ async def delete(project_id: int, session: SessionDep) -> HTMLResponse:
 
 
 async def _models_partial(request: Request, project_id: int, session: AsyncSession) -> HTMLResponse:
-    """HTMX swap target for the project's Models section."""
+    """HTMX swap target for the project's Models section. Users only
+    reach this from edit mode, so render the section in edit mode."""
     project = await svc.get_project(session, project_id)
     project_models = await link_svc.list_project_models(session, project_id)
     available_models = await link_svc.list_unlinked_models(session, project_id)
@@ -252,6 +242,7 @@ async def _models_partial(request: Request, project_id: int, session: AsyncSessi
             "project": project,
             "project_models": project_models,
             "available_models": available_models,
+            "edit_mode": True,
         },
     )
 
@@ -268,7 +259,7 @@ async def add_model(project_id: int, request: Request, session: SessionDep) -> H
         if is_htmx(request):
             return await _models_partial(request, project_id, session)
         return RedirectResponse(
-            url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER
+            url=f"/projects/{project_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
         )
     try:
         await link_svc.add_model(session, project_id, payload)
@@ -277,7 +268,9 @@ async def add_model(project_id: int, request: Request, session: SessionDep) -> H
         pass
     if is_htmx(request):
         return await _models_partial(request, project_id, session)
-    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        url=f"/projects/{project_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
+    )
 
 
 _VALID_MODEL_LINK_STATUSES = frozenset({"pending", "printed", "failed"})
@@ -287,7 +280,6 @@ _VALID_MODEL_LINK_STATUSES = frozenset({"pending", "printed", "failed"})
 async def update_model_qty(
     project_id: int, model_id: int, request: Request, session: SessionDep
 ) -> HTMLResponse:
-    """Inline qty_to_print edit for a project_model link."""
     form = await request.form()
     raw = (form.get("qty_to_print") or "").strip()
     try:
@@ -304,19 +296,15 @@ async def update_model_qty(
             pass
     if is_htmx(request):
         return await _models_partial(request, project_id, session)
-    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        url=f"/projects/{project_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
+    )
 
 
 @router.post("/projects/{project_id}/models/{model_id}/status", response_class=HTMLResponse)
 async def update_model_status(
     project_id: int, model_id: int, request: Request, session: SessionDep
 ) -> HTMLResponse:
-    """Inline status edit for a project_model link.
-
-    The status (pending | printed | failed) belongs to the project link,
-    not the underlying Model — the same model can be 'pending' on one
-    project and 'printed' on another.
-    """
     form = await request.form()
     raw = (form.get("status") or "").strip()
     if raw in _VALID_MODEL_LINK_STATUSES:
@@ -329,7 +317,9 @@ async def update_model_status(
             pass
     if is_htmx(request):
         return await _models_partial(request, project_id, session)
-    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        url=f"/projects/{project_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
+    )
 
 
 @router.post("/projects/{project_id}/models/{model_id}/delete", response_class=HTMLResponse)
@@ -343,7 +333,9 @@ async def remove_model(
         pass
     if is_htmx(request):
         return await _models_partial(request, project_id, session)
-    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        url=f"/projects/{project_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
+    )
 
 
 @router.post("/projects/{project_id}/filaments", response_class=HTMLResponse)
@@ -358,14 +350,16 @@ async def add_filament(project_id: int, request: Request, session: SessionDep) -
         )
     except (ValueError, ValidationError):
         return RedirectResponse(
-            url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER
+            url=f"/projects/{project_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
         )
     try:
         await link_svc.add_filament(session, project_id, payload)
         await session.commit()
     except NotFoundError:
         pass
-    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        url=f"/projects/{project_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
+    )
 
 
 @router.post("/projects/{project_id}/filaments/{link_id}/delete", response_class=HTMLResponse)
@@ -375,14 +369,12 @@ async def remove_filament(project_id: int, link_id: int, session: SessionDep) ->
         await session.commit()
     except NotFoundError:
         pass
-    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        url=f"/projects/{project_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
+    )
 
 
 async def _bom_partial(request: Request, project_id: int, session: AsyncSession) -> HTMLResponse:
-    """Render the BOM section partial. Used as the HTMX swap response so
-    every BOM mutation re-paints the whole section in place — no scroll
-    jump, no full page reload.
-    """
     project = await svc.get_project(session, project_id)
     project_items = await link_svc.list_project_items(session, project_id)
     bom = await bom_svc.project_bom(session, project_id)
@@ -397,6 +389,7 @@ async def _bom_partial(request: Request, project_id: int, session: AsyncSession)
             "project_items": project_items,
             "bom": bom,
             "available_items": available_items,
+            "edit_mode": True,
         },
     )
 
@@ -410,13 +403,11 @@ async def add_item(project_id: int, request: Request, session: SessionDep) -> HT
     raw_name = (form.get("name") or "").strip()
     raw_unit = (form.get("unit") or "").strip()
 
-    # Empty submission (user tabbed through without typing or picking) is a
-    # no-op. Re-render the partial so HTMX gets a valid swap target.
     if not raw_inv_id and not raw_name:
         if is_htmx(request):
             return await _bom_partial(request, project_id, session)
         return RedirectResponse(
-            url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER
+            url=f"/projects/{project_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
         )
 
     try:
@@ -431,7 +422,7 @@ async def add_item(project_id: int, request: Request, session: SessionDep) -> HT
         if is_htmx(request):
             return await _bom_partial(request, project_id, session)
         return RedirectResponse(
-            url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER
+            url=f"/projects/{project_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
         )
     try:
         await link_svc.add_item(session, project_id, payload)
@@ -440,7 +431,9 @@ async def add_item(project_id: int, request: Request, session: SessionDep) -> HT
         pass
     if is_htmx(request):
         return await _bom_partial(request, project_id, session)
-    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        url=f"/projects/{project_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
+    )
 
 
 @router.post("/projects/{project_id}/items/{link_id}/link", response_class=HTMLResponse)
@@ -457,7 +450,9 @@ async def link_item_to_inventory(
             pass
     if is_htmx(request):
         return await _bom_partial(request, project_id, session)
-    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        url=f"/projects/{project_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
+    )
 
 
 @router.post("/projects/{project_id}/items/{link_id}/delete", response_class=HTMLResponse)
@@ -471,19 +466,15 @@ async def remove_item(
         pass
     if is_htmx(request):
         return await _bom_partial(request, project_id, session)
-    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        url=f"/projects/{project_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
+    )
 
 
 @router.post("/projects/{project_id}/items/{link_id}/qty", response_class=HTMLResponse)
 async def update_item_qty(
     project_id: int, link_id: int, request: Request, session: SessionDep
 ) -> HTMLResponse:
-    """Inline qty edit: tiny per-row form auto-submits on change.
-
-    Accepts qty_required and/or qty_consumed; missing fields are left
-    untouched. Bad input is silently ignored — the value snaps back to
-    whatever the DB has on the next render.
-    """
     form = await request.form()
     payload_data: dict[str, float] = {}
     for field in ("qty_required", "qty_consumed"):
@@ -505,22 +496,9 @@ async def update_item_qty(
             pass
     if is_htmx(request):
         return await _bom_partial(request, project_id, session)
-    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
-
-
-# ── inline notes edit ─────────────────────────────────────────────────────
-
-
-@router.post("/projects/{project_id}/notes", response_class=HTMLResponse)
-async def update_notes(project_id: int, request: Request, session: SessionDep) -> HTMLResponse:
-    """Quick journal-style notes update from the detail page."""
-    form = await request.form()
-    notes = form.get("notes")
-    # Empty string clears the notes; None should also collapse to NULL.
-    cleaned = notes.strip() if isinstance(notes, str) else None
-    await svc.update_project(session, project_id, ProjectUpdate(notes=cleaned or None))
-    await session.commit()
-    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        url=f"/projects/{project_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
+    )
 
 
 # ── project-side file upload (auto-creates Models, links them) ────────────
@@ -535,10 +513,6 @@ async def upload_files(
     session: SessionDep,
     files: Annotated[list[UploadFile], File()],
 ) -> HTMLResponse:
-    """Drop STL/STEP/3MF/gcode files on a project and have them turn into
-    new Models that are auto-linked. Image files are ignored here — they
-    belong to the photo upload flow.
-    """
     project = await svc.get_project(session, project_id)
     base_name = project.name
     for file in files:
@@ -548,8 +522,6 @@ async def upload_files(
         ext = Path(name).suffix.lower()
         if ext not in _MODEL_ASSET_EXTS:
             continue
-        # New Model named after the filename (without extension); the user
-        # can rename later if they want.
         model_name = Path(name).stem or base_name
         model = await model_svc.create_model(
             session, ModelCreate(name=model_name, source_type="local")
@@ -557,7 +529,6 @@ async def upload_files(
         try:
             await asset_svc.upload_asset(session, model.id, file)
         except UploadError:
-            # Best-effort: skip the broken file but keep going through the rest.
             await session.rollback()
             continue
         await link_svc.add_model(
@@ -566,7 +537,9 @@ async def upload_files(
             ProjectModelLinkCreate(model_id=model.id, qty_to_print=1),
         )
         await session.commit()
-    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        url=f"/projects/{project_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
+    )
 
 
 # ── project photos ────────────────────────────────────────────────────────
@@ -588,24 +561,26 @@ async def upload_photo(
     field = _PHOTO_KIND_FIELDS.get(kind)
     if field is None:
         return RedirectResponse(
-            url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER
+            url=f"/projects/{project_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
         )
     project = await svc.get_project(session, project_id)
     if not (file.filename or "").strip():
         return RedirectResponse(
-            url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER
+            url=f"/projects/{project_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
         )
     try:
         new_path, _, _ = await save_photo(file, subdir="projects")
     except UploadError:
         return RedirectResponse(
-            url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER
+            url=f"/projects/{project_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
         )
     old_path = getattr(project, field)
     setattr(project, field, new_path)
     await session.commit()
     delete_upload(old_path)
-    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        url=f"/projects/{project_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
+    )
 
 
 @router.post("/projects/{project_id}/photo/{kind}/delete", response_class=HTMLResponse)
@@ -613,11 +588,13 @@ async def delete_photo(project_id: int, kind: str, session: SessionDep) -> HTMLR
     field = _PHOTO_KIND_FIELDS.get(kind)
     if field is None:
         return RedirectResponse(
-            url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER
+            url=f"/projects/{project_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
         )
     project = await svc.get_project(session, project_id)
     old_path = getattr(project, field)
     setattr(project, field, None)
     await session.commit()
     delete_upload(old_path)
-    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        url=f"/projects/{project_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
+    )

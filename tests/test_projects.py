@@ -8,6 +8,98 @@ from tests.factories import (
     persist,
 )
 
+# ── UI: read/edit toggle and draft-create flow ────────────────────────────
+
+
+async def test_new_project_button_creates_draft_in_edit_mode(client: AsyncClient) -> None:
+    """Mirror of printers/models — '+ New project' POSTs to /projects/new,
+    creates a stub named 'New project', and drops the user on the detail
+    page in edit mode."""
+    resp = await client.post("/projects/new", follow_redirects=False)
+    assert resp.status_code == 303
+    location = resp.headers["location"]
+    assert location.startswith("/projects/")
+    assert location.endswith("?edit=true")
+
+    detail = await client.get(location)
+    assert detail.status_code == 200
+    assert 'value="New project"' in detail.text
+    assert "Done editing" in detail.text
+    assert "Delete project" in detail.text
+
+
+async def test_project_detail_read_mode_hides_edit_affordances(client: AsyncClient) -> None:
+    create = await client.post("/api/projects", json={"name": "P"})
+    pid = create.json()["id"]
+
+    read = await client.get(f"/projects/{pid}")
+    # No basic-field inputs in read mode.
+    assert 'name="name"' not in read.text
+    # Edit toggle entry.
+    assert "Edit page" in read.text
+
+
+async def test_project_detail_edit_mode_reveals_form(client: AsyncClient) -> None:
+    create = await client.post("/api/projects", json={"name": "Editable"})
+    pid = create.json()["id"]
+
+    edit = await client.get(f"/projects/{pid}?edit=true")
+    assert 'value="Editable"' in edit.text
+    assert "Done editing" in edit.text
+    # Photos upload forms appear in edit mode.
+    assert f'action="/projects/{pid}/photo/cover"' in edit.text
+
+
+async def test_done_editing_saves_and_exits_read_mode(client: AsyncClient) -> None:
+    create = await client.post("/projects/new", follow_redirects=False)
+    pid = int(create.headers["location"].split("/")[2].split("?")[0])
+
+    save = await client.post(
+        f"/projects/{pid}",
+        data={
+            "name": "Voron Build",
+            "description": "Full build journal",
+            "status": "printing",
+            "tags": "voron, build",
+            "notes": "ordered the heatsets",
+            "printer_id": "",
+        },
+        follow_redirects=False,
+    )
+    assert save.status_code == 303
+    # Exits to read mode.
+    assert save.headers["location"] == f"/projects/{pid}"
+
+    api = await client.get(f"/api/projects/{pid}")
+    body = api.json()
+    assert body["name"] == "Voron Build"
+    assert body["status"] == "printing"
+    assert body["notes"] == "ordered the heatsets"
+    assert body["tags"] == ["voron", "build"]
+
+
+async def test_add_to_bom_stays_in_edit_mode(client: AsyncClient) -> None:
+    """Non-HTMX BOM add (e.g. JS-disabled fallback) keeps the user in
+    edit mode rather than kicking them out."""
+    create = await client.post("/projects/new", follow_redirects=False)
+    pid = int(create.headers["location"].split("/")[2].split("?")[0])
+
+    resp = await client.post(
+        f"/projects/{pid}/items",
+        data={"name": "M3x12 SHCS", "qty_required": "5", "qty_consumed": "0"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == f"/projects/{pid}?edit=true"
+
+
+async def test_old_project_form_routes_are_gone(client: AsyncClient) -> None:
+    assert (await client.get("/projects/new")).status_code in (404, 422)
+
+    create = await client.post("/projects/new", follow_redirects=False)
+    pid = int(create.headers["location"].split("/")[2].split("?")[0])
+    assert (await client.get(f"/projects/{pid}/edit")).status_code == 404
+
 
 async def test_create_project_minimal(client: AsyncClient) -> None:
     resp = await client.post(

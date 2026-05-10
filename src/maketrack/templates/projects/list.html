@@ -18,10 +18,12 @@
       {{ items|length }} project{{ '' if items|length == 1 else 's' }}{% if current_status %} · filtered by <span class="font-mono">{{ current_status }}</span>{% endif %}
     </p>
   </div>
-  <a href="/projects/new"
-     class="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500">
-    + New project
-  </a>
+  <form method="post" action="/projects/new">
+    <button type="submit"
+            class="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500">
+      + New project
+    </button>
+  </form>
 </header>
 
 {# Each status chip preserves the current ?q= so filtering by status

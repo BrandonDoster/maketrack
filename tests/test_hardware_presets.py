@@ -60,7 +60,8 @@ async def test_bom_entry_row_has_autocomplete_and_hidden_unit(
 ) -> None:
     project = await client.post("/api/projects", json={"name": "P"})
     pid = project.json()["id"]
-    resp = await client.get(f"/projects/{pid}")
+    # The BOM entry row is an edit affordance, so it only renders in edit mode.
+    resp = await client.get(f"/projects/{pid}?edit=true")
     assert resp.status_code == 200
     # The entry-row name input is wired.
     assert 'data-hardware-preset="unit"' in resp.text

@@ -297,13 +297,16 @@ async def test_inline_qty_invalid_input_is_ignored(client: AsyncClient) -> None:
     assert bom[0]["still_needed_for_project"] == 10  # unchanged
 
 
-async def test_inline_notes_save(client: AsyncClient) -> None:
+async def test_notes_save_via_basic_fields_form(client: AsyncClient) -> None:
+    """Notes are saved as part of the basic-fields form on the detail
+    page (clicking Done editing); the standalone /notes endpoint is
+    gone in favor of one consolidated save."""
     project = await client.post("/api/projects", json={"name": "P"})
     pid = project.json()["id"]
 
     resp = await client.post(
-        f"/projects/{pid}/notes",
-        data={"notes": "ordered the heatsets, ETA Friday"},
+        f"/projects/{pid}",
+        data={"name": "P", "notes": "ordered the heatsets, ETA Friday"},
         follow_redirects=False,
     )
     assert resp.status_code == 303
@@ -312,17 +315,13 @@ async def test_inline_notes_save(client: AsyncClient) -> None:
     assert fetched["notes"] == "ordered the heatsets, ETA Friday"
 
 
-async def test_inline_notes_clears_on_empty(client: AsyncClient) -> None:
-    project = await client.post("/api/projects", json={"name": "P"})
+async def test_notes_clears_on_empty_via_basic_fields(client: AsyncClient) -> None:
+    project = await client.post("/api/projects", json={"name": "P", "notes": "first pass"})
     pid = project.json()["id"]
+
     await client.post(
-        f"/projects/{pid}/notes",
-        data={"notes": "first pass"},
-        follow_redirects=False,
-    )
-    await client.post(
-        f"/projects/{pid}/notes",
-        data={"notes": "   "},
+        f"/projects/{pid}",
+        data={"name": "P", "notes": ""},
         follow_redirects=False,
     )
     fetched = (await client.get(f"/api/projects/{pid}")).json()
@@ -353,31 +352,14 @@ async def test_edit_form_clears_description(client: AsyncClient) -> None:
     assert fetched["description"] is None
 
 
-async def test_edit_form_clears_notes_via_inline_path(client: AsyncClient) -> None:
-    """The dedicated /notes endpoint already clears correctly, but make
-    sure both POST paths agree (regression-flag for future helper edits)."""
-    project = await client.post("/api/projects", json={"name": "P", "notes": "old"})
-    pid = project.json()["id"]
-
-    await client.post(
-        f"/projects/{pid}/notes",
-        data={"notes": ""},
-        follow_redirects=False,
-    )
-    fetched = (await client.get(f"/api/projects/{pid}")).json()
-    assert fetched["notes"] is None
-
-
-async def test_edit_form_no_longer_renders_notes_textarea(client: AsyncClient) -> None:
-    """Notes moved inline on the detail page; the edit form should not
-    show a notes textarea anymore (the inline view is the only entry
-    point so users can't get into a state where the edit form silently
-    overwrites the journal)."""
+async def test_edit_mode_renders_notes_textarea(client: AsyncClient) -> None:
+    """Notes lives inside the basic-fields form on the detail page in
+    edit mode — it commits with everything else on Done editing."""
     project = await client.post("/api/projects", json={"name": "P"})
     pid = project.json()["id"]
-    edit = await client.get(f"/projects/{pid}/edit")
+    edit = await client.get(f"/projects/{pid}?edit=true")
     assert edit.status_code == 200
-    assert 'name="notes"' not in edit.text
+    assert 'name="notes"' in edit.text
 
 
 async def test_qty_edit_returns_partial_for_htmx(client: AsyncClient) -> None:
@@ -520,14 +502,15 @@ async def test_detail_page_uses_tabbed_thumbnail_and_lightbox(
     assert f'/projects/{pid}/photo/completed"' not in detail.text
 
 
-async def test_edit_page_now_owns_photo_upload(
+async def test_edit_mode_owns_photo_upload(
     client: AsyncClient,
 ) -> None:
+    """Photos upload forms now live inline on the detail page but only
+    appear in edit mode (?edit=true)."""
     project = await client.post("/api/projects", json={"name": "Tabbed"})
     pid = project.json()["id"]
-    edit = await client.get(f"/projects/{pid}/edit")
+    edit = await client.get(f"/projects/{pid}?edit=true")
     assert edit.status_code == 200
-    # Upload + remove forms live here now
     assert f'action="/projects/{pid}/photo/cover"' in edit.text
     assert f'action="/projects/{pid}/photo/completed"' in edit.text
 
@@ -560,16 +543,21 @@ async def test_printer_renders_on_status_row(client: AsyncClient) -> None:
     assert "Voron 2.4" in detail.text
 
 
-async def test_notes_textarea_is_alpine_auto_growing(client: AsyncClient) -> None:
-    """The notes textarea uses Alpine to auto-resize on input. Smoke-check
-    the markup is wired up so we don't lose it on a rewrite."""
+async def test_model_link_status_select_renders_in_edit_mode(client: AsyncClient) -> None:
     project = await client.post("/api/projects", json={"name": "P"})
     pid = project.json()["id"]
-    detail = await client.get(f"/projects/{pid}")
-    assert "@input" in detail.text and "scrollHeight" in detail.text
+    model = await client.post("/api/models", json={"name": "Bracket"})
+    mid = model.json()["id"]
+    await client.post(f"/api/projects/{pid}/models", json={"model_id": mid})
+
+    # The inline status select is an edit affordance; gated behind ?edit=true.
+    detail = await client.get(f"/projects/{pid}?edit=true")
+    assert f"/projects/{pid}/models/{mid}/status" in detail.text
 
 
-async def test_model_link_status_select_renders(client: AsyncClient) -> None:
+async def test_model_link_status_chip_in_read_mode(client: AsyncClient) -> None:
+    """In read mode the model link's status renders as a static chip
+    instead of an editable select."""
     project = await client.post("/api/projects", json={"name": "P"})
     pid = project.json()["id"]
     model = await client.post("/api/models", json={"name": "Bracket"})
@@ -577,8 +565,10 @@ async def test_model_link_status_select_renders(client: AsyncClient) -> None:
     await client.post(f"/api/projects/{pid}/models", json={"model_id": mid})
 
     detail = await client.get(f"/projects/{pid}")
-    # The inline status form posts to /status; the select is wired up.
-    assert f"/projects/{pid}/models/{mid}/status" in detail.text
+    # The editable select is hidden in read mode.
+    assert f"/projects/{pid}/models/{mid}/status" not in detail.text
+    # Status chip still shows the value.
+    assert ">pending<" in detail.text
 
 
 async def test_model_status_inline_edit_persists(client: AsyncClient) -> None:
@@ -619,8 +609,9 @@ async def test_model_status_rejects_invalid_value(client: AsyncClient) -> None:
     assert rows[0]["status"] == "pending"
 
 
-async def test_detail_page_renders_inline_widgets(client: AsyncClient) -> None:
-    """The detail page should show qty inputs (not just text) and a notes textarea."""
+async def test_edit_mode_renders_inline_widgets(client: AsyncClient) -> None:
+    """In edit mode the detail page shows qty inputs (HTMX-wired) and
+    the notes textarea inside the basic-fields form."""
     project = await client.post("/api/projects", json={"name": "Widgets"})
     pid = project.json()["id"]
     inv = await client.post("/api/inventory", json={"name": "Bolt"})
@@ -630,10 +621,10 @@ async def test_detail_page_renders_inline_widgets(client: AsyncClient) -> None:
         json={"inventory_item_id": iid, "qty_required": 5},
     )
 
-    detail = await client.get(f"/projects/{pid}")
+    detail = await client.get(f"/projects/{pid}?edit=true")
     assert detail.status_code == 200
-    # The inline qty form posts to the qty endpoint per row.
+    # Inline qty form posts to the qty endpoint per row.
     assert f"/projects/{pid}/items/" in detail.text
     assert "/qty" in detail.text
-    # Notes form action is present.
-    assert f'action="/projects/{pid}/notes"' in detail.text
+    # Notes textarea is part of the basic-fields form.
+    assert 'name="notes"' in detail.text
