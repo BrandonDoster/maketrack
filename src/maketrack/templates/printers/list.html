@@ -10,10 +10,12 @@
       {{ printers|length }} printer{{ '' if printers|length == 1 else 's' }} · projects link to which one printed them.
     </p>
   </div>
-  <a href="/printers/new"
-     class="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500">
-    + New printer
-  </a>
+  <form method="post" action="/printers/new">
+    <button type="submit"
+            class="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500">
+      + New printer
+    </button>
+  </form>
 </header>
 
 {% set ic = "rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white" %}

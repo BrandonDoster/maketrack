@@ -4,27 +4,74 @@
 
 {% block content %}
 {% set btn_outline = "rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800" %}
+{% set btn_outline_danger = "rounded-md border border-rose-300 px-3 py-1.5 text-sm font-medium text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950/40" %}
 {% set btn_active = "rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500" %}
 
+{% set ic = "rounded border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white" %}
+
+{% if errors %}
+  <div class="mb-4 rounded border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-700 dark:bg-rose-950/40 dark:text-rose-200">
+    <ul class="list-disc pl-5">{% for err in errors %}<li>{{ err }}</li>{% endfor %}</ul>
+  </div>
+{% endif %}
+
 <header class="mb-6 flex items-start justify-between gap-6">
-  <div class="flex-1">
+  <div class="flex-1 min-w-0">
     <a href="/printers" class="text-sm text-slate-500 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400">← Printers</a>
-    <h1 class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{{ printer.name }}</h1>
-    <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ printer.model or '—' }}</p>
-    {% if printer.access_url %}
-      <p class="mt-2"><a href="{{ printer.access_url }}" target="_blank" rel="noopener"
-                        class="text-sm text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300">Open printer UI ↗</a></p>
-    {% endif %}
-    {% if printer.notes %}
-      <p class="mt-3 max-w-2xl whitespace-pre-line text-sm text-slate-600 dark:text-slate-300">{{ printer.notes }}</p>
+
+    {% if edit_mode %}
+      {# The fields live in this form; "Done editing" in the top-right is
+         the submit button (via form="printer-basic-form"). Save + exit
+         in one click. #}
+      <form id="printer-basic-form" method="post" action="/printers/{{ printer.id }}" class="mt-3 max-w-2xl space-y-4">
+        <label class="block">
+          <span class="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Name</span>
+          <input type="text" name="name" required value="{{ printer.name }}"
+                 class="{{ ic }} mt-1 w-full text-2xl font-semibold">
+        </label>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <label class="block">
+            <span class="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Model</span>
+            <input type="text" name="model" value="{{ printer.model or '' }}"
+                   placeholder="Voron 2.4 350mm, Bambu X1C, Prusa MK4…"
+                   class="{{ ic }} mt-1 w-full">
+          </label>
+          <label class="block">
+            <span class="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Access URL</span>
+            <input type="url" name="access_url" value="{{ printer.access_url or '' }}"
+                   placeholder="http://mainsail.local"
+                   class="{{ ic }} mt-1 w-full">
+          </label>
+        </div>
+        <label class="block">
+          <span class="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Notes</span>
+          <textarea name="notes" rows="3" class="{{ ic }} mt-1 w-full">{{ printer.notes or '' }}</textarea>
+        </label>
+      </form>
+
+      {# Delete form lives at the bottom of the DOM but its submit button
+         is in the top-right corner (via form="printer-delete-form"). #}
+      <form id="printer-delete-form" method="post" action="/printers/{{ printer.id }}/delete"
+            onsubmit="return confirm('Delete this printer? Build entries are removed too; the photos on disk get cleaned up.');"
+            class="hidden"></form>
+    {% else %}
+      <h1 class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{{ printer.name }}</h1>
+      <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ printer.model or '—' }}</p>
+      {% if printer.access_url %}
+        <p class="mt-2"><a href="{{ printer.access_url }}" target="_blank" rel="noopener"
+                          class="text-sm text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300">Open printer UI ↗</a></p>
+      {% endif %}
+      {% if printer.notes %}
+        <p class="mt-3 max-w-2xl whitespace-pre-line text-sm text-slate-600 dark:text-slate-300">{{ printer.notes }}</p>
+      {% endif %}
     {% endif %}
   </div>
 
   <div class="flex flex-shrink-0 flex-col items-end gap-3">
-    <div class="flex gap-2">
-      <a href="/printers/{{ printer.id }}/edit" class="{{ btn_outline }}">Edit details</a>
+    <div class="flex flex-wrap justify-end gap-2">
       {% if edit_mode %}
-        <a href="/printers/{{ printer.id }}" class="{{ btn_active }}">Done editing</a>
+        <button type="submit" form="printer-delete-form" class="{{ btn_outline_danger }}">Delete printer</button>
+        <button type="submit" form="printer-basic-form" class="{{ btn_active }}">Done editing</button>
       {% else %}
         <a href="/printers/{{ printer.id }}?edit=true" class="{{ btn_outline }}">Edit page</a>
       {% endif %}

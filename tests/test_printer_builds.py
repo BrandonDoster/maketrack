@@ -57,16 +57,17 @@ async def test_detail_edit_mode_reveals_forms(client: AsyncClient) -> None:
     assert ">Add model<" in resp.text
     assert ">Add project<" in resp.text
     assert ">Add custom<" in resp.text
-    # Done-editing exit link points back to the read-mode URL.
-    assert f'href="/printers/{pid}"' in resp.text
+    # Top-right action buttons in edit mode.
+    assert ">Done editing<" in resp.text
+    assert ">Delete printer<" in resp.text
     # Upload form for an absent photo IS rendered in edit mode.
     assert "No photo yet" in resp.text
 
 
 async def test_edit_page_button_active_state(client: AsyncClient) -> None:
-    """The Edit page button is an outline button in read mode and a
-    solid emerald button when on the edit-mode layout — visual signal
-    that you're currently editing."""
+    """The Edit page link is an outline link in read mode; on the edit
+    layout it's replaced by a solid emerald 'Done editing' submit
+    button — visual signal that you're currently editing."""
     pid = await _new_printer(client)
 
     read = await client.get(f"/printers/{pid}")
@@ -77,17 +78,15 @@ async def test_edit_page_button_active_state(client: AsyncClient) -> None:
     assert "Done editing" not in read.text
 
     edit = await client.get(f"/printers/{pid}?edit=true")
-    assert ">Done editing<" in edit.text
-    # Active emerald background on the toggle in edit mode (the same
-    # btn_active class is reused elsewhere, so just check the label
-    # appears alongside the active class on a single anchor).
+    # Done editing is now the submit button of the basic-fields form,
+    # styled with the active emerald background.
     import re
 
     match = re.search(
-        r'<a[^>]+href="/printers/\d+"[^>]+class="[^"]*bg-emerald-600[^"]*"[^>]*>\s*Done editing\s*</a>',
+        r'<button[^>]+form="printer-basic-form"[^>]+class="[^"]*bg-emerald-600[^"]*"[^>]*>\s*Done editing\s*</button>',
         edit.text,
     )
-    assert match, "Done editing button should carry the active emerald style"
+    assert match, "Done editing should be the active emerald submit button"
 
 
 async def test_printer_photo_upload_and_remove(client: AsyncClient) -> None:
@@ -385,17 +384,53 @@ async def test_ui_build_photo_upload_and_remove(client: AsyncClient) -> None:
     assert "/media/printers/builds/" not in detail.text
 
 
-async def test_delete_build_redirects_to_detail(client: AsyncClient) -> None:
+async def test_delete_build_stays_in_edit_mode(client: AsyncClient) -> None:
     pid = await _new_printer(client)
     create = await client.post(f"/api/printers/{pid}/builds", json={"name": "x"})
     build_id = create.json()["id"]
 
     resp = await client.post(f"/printers/{pid}/builds/{build_id}/delete", follow_redirects=False)
     assert resp.status_code == 303
-    assert resp.headers["location"] == f"/printers/{pid}"
+    # Stay in edit mode — user is still building out the printer.
+    assert resp.headers["location"] == f"/printers/{pid}?edit=true"
 
     listed = await client.get(f"/api/printers/{pid}/builds")
     assert listed.json() == []
+
+
+async def test_add_to_build_actions_stay_in_edit_mode(client: AsyncClient) -> None:
+    """The three add-to-build paths return the user to edit mode so they
+    can keep adding things without re-toggling. Only "Done editing" exits."""
+    pid = await _new_printer(client)
+    mid = await _new_model(client, "thing")
+    proj_id = await _new_project(client, "j")
+
+    for data in (
+        {"model_id": str(mid)},
+        {"source_project_id": str(proj_id)},
+        {"name": "Custom"},
+    ):
+        resp = await client.post(f"/printers/{pid}/builds", data=data, follow_redirects=False)
+        assert resp.status_code == 303, f"failed for {data!r}"
+        assert resp.headers["location"] == f"/printers/{pid}?edit=true", (
+            f"add path {data!r} kicked out of edit mode"
+        )
+
+
+async def test_photo_upload_and_remove_stay_in_edit_mode(client: AsyncClient) -> None:
+    pid = await _new_printer(client)
+
+    upload = await client.post(
+        f"/printers/{pid}/photo",
+        files={"photo": ("p.png", io.BytesIO(_PNG_1X1), "image/png")},
+        follow_redirects=False,
+    )
+    assert upload.status_code == 303
+    assert upload.headers["location"] == f"/printers/{pid}?edit=true"
+
+    remove = await client.post(f"/printers/{pid}/photo/delete", follow_redirects=False)
+    assert remove.status_code == 303
+    assert remove.headers["location"] == f"/printers/{pid}?edit=true"
 
 
 async def test_deleting_printer_cascades_builds(client: AsyncClient) -> None:

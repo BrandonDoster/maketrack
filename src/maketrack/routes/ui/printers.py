@@ -9,7 +9,6 @@ from maketrack.db import get_session
 from maketrack.routes.ui._forms import (
     format_validation_error,
     null_empty_strings,
-    strip_empty_strings,
 )
 from maketrack.schemas.printer import PrinterCreate, PrinterUpdate
 from maketrack.services import printer_builds as build_svc
@@ -19,6 +18,11 @@ from maketrack.templating import templates
 
 router = APIRouter(tags=["ui-printers"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
+# Placeholder used when a draft printer is created with no fields filled
+# in. The user is dropped immediately on the detail page in edit mode and
+# is expected to rename it.
+DRAFT_PRINTER_NAME = "New printer"
 
 
 @router.get("/printers", response_class=HTMLResponse)
@@ -35,51 +39,62 @@ async def list_page(
     )
 
 
-@router.get("/printers/new", response_class=HTMLResponse)
-async def new_form(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(
-        request, "printers/form.html", {"printer": None, "errors": None}
+@router.post("/printers/new", response_class=HTMLResponse)
+async def create_draft(session: SessionDep) -> HTMLResponse:
+    """Create a stub printer and drop the user on its detail page in
+    edit mode. Replaces the standalone create-printer form."""
+    p = await svc.create_printer(session, PrinterCreate(name=DRAFT_PRINTER_NAME))
+    await session.commit()
+    return RedirectResponse(
+        url=f"/printers/{p.id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
     )
 
 
-@router.post("/printers", response_class=HTMLResponse)
-async def create(request: Request, session: SessionDep) -> HTMLResponse:
-    form = strip_empty_strings(dict(await request.form()))
-    try:
-        payload = PrinterCreate(**form)
-    except ValidationError as exc:
-        return templates.TemplateResponse(
-            request,
-            "printers/form.html",
-            {"printer": None, "errors": [format_validation_error(e) for e in exc.errors()]},
-            status_code=status.HTTP_400_BAD_REQUEST,
-        )
-    await svc.create_printer(session, payload)
-    await session.commit()
-    return RedirectResponse(url="/printers", status_code=status.HTTP_303_SEE_OTHER)
-
-
-@router.get("/printers/{printer_id}/edit", response_class=HTMLResponse)
-async def edit_form(printer_id: int, request: Request, session: SessionDep) -> HTMLResponse:
+async def _render_edit_with_errors(
+    request: Request,
+    session: AsyncSession,
+    printer_id: int,
+    errors: list[str],
+) -> HTMLResponse:
     p = await svc.get_printer(session, printer_id)
-    return templates.TemplateResponse(request, "printers/form.html", {"printer": p, "errors": None})
+    builds = await build_svc.list_for_printer(session, printer_id)
+    return templates.TemplateResponse(
+        request,
+        "printers/detail.html",
+        {
+            "printer": p,
+            "builds": builds,
+            "available_projects": [],
+            "available_models": [],
+            "edit_mode": True,
+            "errors": errors,
+        },
+        status_code=status.HTTP_400_BAD_REQUEST,
+    )
 
 
 @router.post("/printers/{printer_id}", response_class=HTMLResponse)
 async def update(printer_id: int, request: Request, session: SessionDep) -> HTMLResponse:
-    form = null_empty_strings(dict(await request.form()))
+    raw_form = dict(await request.form())
+    # The detail-page form always includes `name`. Don't let null_empty_strings
+    # collapse a cleared name into None — PrinterUpdate would accept that and
+    # then the DB would reject it with a NOT NULL violation. Catch it here.
+    if not (raw_form.get("name") or "").strip():
+        return await _render_edit_with_errors(request, session, printer_id, ["Name is required."])
+
+    form = null_empty_strings(raw_form)
     try:
         payload = PrinterUpdate(**form)
     except ValidationError as exc:
-        p = await svc.get_printer(session, printer_id)
-        return templates.TemplateResponse(
+        return await _render_edit_with_errors(
             request,
-            "printers/form.html",
-            {"printer": p, "errors": [format_validation_error(e) for e in exc.errors()]},
-            status_code=status.HTTP_400_BAD_REQUEST,
+            session,
+            printer_id,
+            [format_validation_error(e) for e in exc.errors()],
         )
     await svc.update_printer(session, printer_id, payload)
     await session.commit()
+    # "Done editing" submits this form, so saving exits edit mode.
     return RedirectResponse(url=f"/printers/{printer_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 

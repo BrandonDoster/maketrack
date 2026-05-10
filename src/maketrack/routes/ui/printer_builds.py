@@ -93,13 +93,15 @@ async def upload_photo(printer_id: int, request: Request, session: SessionDep) -
             new_path, _, _ = await save_photo(photo_field, subdir=_PHOTO_SUBDIR_PRINTER)
         except UploadError:
             return RedirectResponse(
-                url=f"/printers/{printer_id}", status_code=status.HTTP_303_SEE_OTHER
+                url=f"/printers/{printer_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
             )
         old = printer.photo_path
         printer.photo_path = new_path
         await session.commit()
         delete_upload(old)
-    return RedirectResponse(url=f"/printers/{printer_id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        url=f"/printers/{printer_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
+    )
 
 
 @router.post("/printers/{printer_id}/photo/delete", response_class=HTMLResponse)
@@ -109,7 +111,9 @@ async def delete_photo(printer_id: int, session: SessionDep) -> HTMLResponse:
     printer.photo_path = None
     await session.commit()
     delete_upload(old)
-    return RedirectResponse(url=f"/printers/{printer_id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        url=f"/printers/{printer_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
+    )
 
 
 @router.post("/printers/{printer_id}/builds", response_class=HTMLResponse)
@@ -123,7 +127,7 @@ async def create_build(printer_id: int, request: Request, session: SessionDep) -
     _coerce_optional_int(form, "model_id")
     _coerce_optional_int(form, "source_project_id")
     redirect = RedirectResponse(
-        url=f"/printers/{printer_id}", status_code=status.HTTP_303_SEE_OTHER
+        url=f"/printers/{printer_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
     )
 
     if form.get("model_id"):
@@ -243,7 +247,9 @@ async def update_build(
         build.photo_path = None
 
     await session.commit()
-    return RedirectResponse(url=f"/printers/{printer_id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        url=f"/printers/{printer_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
+    )
 
 
 @router.post("/printers/{printer_id}/builds/{build_id}/delete", response_class=HTMLResponse)
@@ -251,7 +257,9 @@ async def delete_build(printer_id: int, build_id: int, session: SessionDep) -> H
     build = await svc.delete_build(session, build_id)
     await session.commit()
     delete_upload(build.photo_path)
-    return RedirectResponse(url=f"/printers/{printer_id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        url=f"/printers/{printer_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
+    )
 
 
 @router.post("/printers/{printer_id}/builds/{build_id}/models", response_class=HTMLResponse)
