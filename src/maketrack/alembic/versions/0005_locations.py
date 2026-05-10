@@ -19,6 +19,13 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    # batch_alter_table on inventory_items rebuilds the table via
+    # CREATE / COPY / DROP / RENAME. The DROP TABLE step trips the FK
+    # from project_items → inventory_items unless FKs are off, and our
+    # async + NullPool setup means alembic's own attempt to toggle the
+    # PRAGMA doesn't reliably persist across statements. Toggle here.
+    op.execute("PRAGMA foreign_keys=OFF")
+
     op.create_table(
         "locations",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -79,8 +86,12 @@ def upgrade() -> None:
     with op.batch_alter_table("inventory_items") as batch:
         batch.drop_column("location")
 
+    op.execute("PRAGMA foreign_keys=ON")
+
 
 def downgrade() -> None:
+    op.execute("PRAGMA foreign_keys=OFF")
+
     with op.batch_alter_table("inventory_items") as batch:
         batch.add_column(sa.Column("location", sa.String(), nullable=True))
 
@@ -97,3 +108,5 @@ def downgrade() -> None:
         batch.drop_column("location_id")
 
     op.drop_table("locations")
+
+    op.execute("PRAGMA foreign_keys=ON")

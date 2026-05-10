@@ -12,6 +12,7 @@ from maketrack.models import (  # noqa: F401  -- imported for metadata registrat
     ExternalSource,
     Filament,
     InventoryItem,
+    Location,
     Model,
     ModelAsset,
     Printer,

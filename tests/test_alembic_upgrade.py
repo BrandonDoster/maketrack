@@ -74,6 +74,11 @@ def test_locations_migration_backfills_existing_text_locations(
     sync_engine = create_engine(f"sqlite:///{db_path}")
     try:
         with sync_engine.begin() as conn:
+            # PRAGMA foreign_keys=ON to mirror prod — our event listener
+            # turns it on for every connection, and the migration must cope
+            # with the project_items → inventory_items FK during the batch
+            # rebuild dance.
+            conn.execute(text("PRAGMA foreign_keys=ON"))
             conn.execute(
                 text(
                     "INSERT INTO inventory_items "
@@ -82,6 +87,23 @@ def test_locations_migration_backfills_existing_text_locations(
                     "('M3 Heatset', 50, 'Bin A3', '2026-05-10', '2026-05-10'),"
                     "('PTFE Tube', 5, 'Drawer 4', '2026-05-10', '2026-05-10'),"
                     "('Spare', 1, NULL, '2026-05-10', '2026-05-10')"
+                )
+            )
+            # Seed a project + a project_items row referencing one of the
+            # inventory items, so the batch rebuild has to actually navigate
+            # the FK from project_items.
+            conn.execute(
+                text(
+                    "INSERT INTO projects (name, status, created_at, updated_at) "
+                    "VALUES ('p', 'planning', '2026-05-10', '2026-05-10')"
+                )
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO project_items "
+                    "(project_id, inventory_item_id, qty_required, qty_consumed, "
+                    "created_at, updated_at) VALUES "
+                    "(1, 1, 5, 0, '2026-05-10', '2026-05-10')"
                 )
             )
     finally:
@@ -118,5 +140,15 @@ def test_locations_migration_backfills_existing_text_locations(
             cols = {c["name"] for c in inspect(sync_engine).get_columns("inventory_items")}
             assert "location" not in cols
             assert "location_id" in cols
+
+            # The FK from project_items survived the batch rebuild — the
+            # row we seeded above still resolves through the join.
+            project_items = conn.execute(
+                text(
+                    "SELECT i.name FROM project_items pi "
+                    "JOIN inventory_items i ON i.id = pi.inventory_item_id"
+                )
+            ).all()
+            assert project_items == [("M3 SHCS",)]
     finally:
         sync_engine.dispose()
