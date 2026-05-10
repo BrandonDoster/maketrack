@@ -73,6 +73,4 @@ async def test_autocomplete_script_loaded_on_every_page(client: AsyncClient) -> 
     a wired input — the script self-skips when no inputs match."""
     for path in ["/", "/inventory", "/inventory/new", "/projects"]:
         resp = await client.get(path)
-        assert "/static/hardware-presets.js" in resp.text, (
-            f"{path} missing autocomplete script"
-        )
+        assert "/static/hardware-presets.js" in resp.text, f"{path} missing autocomplete script"
