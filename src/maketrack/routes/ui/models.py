@@ -6,7 +6,11 @@ from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from maketrack.db import get_session
-from maketrack.routes.ui._forms import format_validation_error, strip_empty_strings
+from maketrack.routes.ui._forms import (
+    format_validation_error,
+    null_empty_strings,
+    strip_empty_strings,
+)
 from maketrack.schemas.model import ModelCreate, ModelUpdate
 from maketrack.services import assets as asset_svc
 from maketrack.services import models as svc
@@ -120,7 +124,7 @@ async def edit_form(model_id: int, request: Request, session: SessionDep) -> HTM
 
 @router.post("/models/{model_id}", response_class=HTMLResponse)
 async def update(model_id: int, request: Request, session: SessionDep) -> HTMLResponse:
-    form = strip_empty_strings(dict(await request.form()))
+    form = null_empty_strings(dict(await request.form()))
     tags = _parse_tags(form.pop("tags", None))
     try:
         payload = ModelUpdate(**form, tags=tags)

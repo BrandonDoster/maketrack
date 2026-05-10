@@ -6,7 +6,11 @@ from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from maketrack.db import get_session, get_sessionmaker
-from maketrack.routes.ui._forms import format_validation_error, strip_empty_strings
+from maketrack.routes.ui._forms import (
+    format_validation_error,
+    null_empty_strings,
+    strip_empty_strings,
+)
 from maketrack.schemas.external_source import (
     ExternalSourceCreate,
     ExternalSourceUpdate,
@@ -20,8 +24,11 @@ router = APIRouter(tags=["ui-sources"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
-def _form_payload(form: dict) -> dict:
-    out = strip_empty_strings(form)
+def _form_payload(form: dict, *, for_update: bool = False) -> dict:
+    # Create: drop empty strings so schema defaults apply.
+    # Update: keep keys but turn empty strings into None so a cleared field
+    # actually clears the column instead of being silently skipped.
+    out = null_empty_strings(form) if for_update else strip_empty_strings(form)
     # Checkboxes only appear in the form data when checked.
     out["enabled"] = form.get("enabled") in ("true", "on", "1")
     return out
@@ -76,7 +83,7 @@ async def edit_form(source_id: int, request: Request, session: SessionDep) -> HT
 @router.post("/settings/sources/{source_id}", response_class=HTMLResponse)
 async def update(source_id: int, request: Request, session: SessionDep) -> HTMLResponse:
     form = dict(await request.form())
-    payload_data = _form_payload(form)
+    payload_data = _form_payload(form, for_update=True)
     # Type isn't editable post-creation; drop it so the partial schema validates.
     payload_data.pop("type", None)
     try:

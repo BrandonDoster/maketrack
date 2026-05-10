@@ -329,6 +329,59 @@ async def test_inline_notes_clears_on_empty(client: AsyncClient) -> None:
     assert fetched["notes"] is None
 
 
+async def test_edit_form_clears_description(client: AsyncClient) -> None:
+    """Regression: clearing description in the edit form must persist as
+    NULL, not silently keep the old text. The bug was that
+    strip_empty_strings dropped empty keys from the PATCH payload, which
+    Pydantic's exclude_unset interpreted as "no change."
+    """
+    project = await client.post(
+        "/api/projects",
+        json={"name": "Has Desc", "description": "first pass"},
+    )
+    pid = project.json()["id"]
+
+    # Use the form-based edit POST to "save" with description cleared.
+    resp = await client.post(
+        f"/projects/{pid}",
+        data={"name": "Has Desc", "description": "", "status": "planning"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+
+    fetched = (await client.get(f"/api/projects/{pid}")).json()
+    assert fetched["description"] is None
+
+
+async def test_edit_form_clears_notes_via_inline_path(client: AsyncClient) -> None:
+    """The dedicated /notes endpoint already clears correctly, but make
+    sure both POST paths agree (regression-flag for future helper edits)."""
+    project = await client.post(
+        "/api/projects", json={"name": "P", "notes": "old"}
+    )
+    pid = project.json()["id"]
+
+    await client.post(
+        f"/projects/{pid}/notes",
+        data={"notes": ""},
+        follow_redirects=False,
+    )
+    fetched = (await client.get(f"/api/projects/{pid}")).json()
+    assert fetched["notes"] is None
+
+
+async def test_edit_form_no_longer_renders_notes_textarea(client: AsyncClient) -> None:
+    """Notes moved inline on the detail page; the edit form should not
+    show a notes textarea anymore (the inline view is the only entry
+    point so users can't get into a state where the edit form silently
+    overwrites the journal)."""
+    project = await client.post("/api/projects", json={"name": "P"})
+    pid = project.json()["id"]
+    edit = await client.get(f"/projects/{pid}/edit")
+    assert edit.status_code == 200
+    assert 'name="notes"' not in edit.text
+
+
 async def test_detail_page_renders_inline_widgets(client: AsyncClient) -> None:
     """The detail page should show qty inputs (not just text) and a notes textarea."""
     project = await client.post("/api/projects", json={"name": "Widgets"})

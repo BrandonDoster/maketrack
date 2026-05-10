@@ -12,7 +12,11 @@ from maketrack.errors import NotFoundError
 from maketrack.models.filament import Filament
 from maketrack.models.inventory import InventoryItem
 from maketrack.models.printer import Printer
-from maketrack.routes.ui._forms import format_validation_error, strip_empty_strings
+from maketrack.routes.ui._forms import (
+    format_validation_error,
+    null_empty_strings,
+    strip_empty_strings,
+)
 from maketrack.schemas.model import ModelCreate
 from maketrack.schemas.project import (
     PROJECT_STATUSES,
@@ -175,13 +179,16 @@ async def edit_form(project_id: int, request: Request, session: SessionDep) -> H
 
 @router.post("/projects/{project_id}", response_class=HTMLResponse)
 async def update(project_id: int, request: Request, session: SessionDep) -> HTMLResponse:
-    form = strip_empty_strings(dict(await request.form()))
+    # Update path: use null_empty_strings so a cleared description / notes
+    # field actually clears the column instead of getting silently dropped.
+    form = null_empty_strings(dict(await request.form()))
     tags = _parse_tags(form.pop("tags", None))
-    if "printer_id" in form:
+    # printer_id arrives as a string from <select>; coerce to int when set.
+    if form.get("printer_id") is not None:
         try:
             form["printer_id"] = int(form["printer_id"])
         except (TypeError, ValueError):
-            form.pop("printer_id", None)
+            form["printer_id"] = None
     try:
         payload = ProjectUpdate(**form, tags=tags)
     except ValidationError as exc:

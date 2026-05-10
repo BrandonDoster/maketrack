@@ -7,7 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from maketrack.db import get_session, get_sessionmaker
 from maketrack.errors import RemoteFilamentError
-from maketrack.routes.ui._forms import format_validation_error, strip_empty_strings
+from maketrack.routes.ui._forms import (
+    format_validation_error,
+    null_empty_strings,
+    strip_empty_strings,
+)
 from maketrack.schemas.filament import FilamentCreate, FilamentUpdate
 from maketrack.services import external_sources as sources_svc
 from maketrack.services import filaments as svc
@@ -78,7 +82,7 @@ async def edit_form(filament_id: int, request: Request, session: SessionDep) -> 
 async def update(filament_id: int, request: Request, session: SessionDep) -> HTMLResponse:
     form = dict(await request.form())
     try:
-        payload = FilamentUpdate(**strip_empty_strings(form))
+        payload = FilamentUpdate(**null_empty_strings(form))
     except ValidationError as exc:
         filament = await svc.get_filament(session, filament_id)
         return templates.TemplateResponse(

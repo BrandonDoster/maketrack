@@ -161,3 +161,21 @@ All notable changes to this project will be documented here. Format roughly foll
   inline qty edit `required=80, consumed=15` → BOM `still_needed=65,
   still_to_buy=55`; inline notes saved and round-tripped through the
   detail page. 126 tests pass.
+
+### Fixed — clearing nullable text fields via edit forms
+- Bug: clearing description / notes (or any nullable text field) in any
+  edit form silently kept the old value. The shared
+  `strip_empty_strings` helper dropped empty-string keys from the
+  payload, and Pydantic's `exclude_unset=True` then read that as "no
+  change" rather than "set to NULL."
+- Fix: added `null_empty_strings` (sibling helper) that keeps every key
+  but turns empty/whitespace-only strings into `None`, so the PATCH
+  payload says "clear this field." Applied to every UI update route —
+  projects, filaments, inventory, printers, models, sources. Create
+  routes still use `strip_empty_strings` so schema defaults apply.
+- Also stripped the `notes` textarea from the project edit form; that
+  field lives inline on the detail page now and was duplicated with
+  conflicting save semantics.
+- Verified end-to-end through Docker: editing a project with a cleared
+  description via the form persisted `description=null`; the edit form
+  contains zero instances of `name="notes"`. 129 tests pass.

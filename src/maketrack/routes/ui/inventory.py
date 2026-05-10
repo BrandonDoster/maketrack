@@ -6,7 +6,11 @@ from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from maketrack.db import get_session
-from maketrack.routes.ui._forms import format_validation_error, strip_empty_strings
+from maketrack.routes.ui._forms import (
+    format_validation_error,
+    null_empty_strings,
+    strip_empty_strings,
+)
 from maketrack.schemas.inventory import InventoryItemCreate, InventoryItemUpdate
 from maketrack.services import inventory as svc
 from maketrack.services.uploads import UploadError, delete_upload, save_photo
@@ -80,7 +84,7 @@ async def edit_form(item_id: int, request: Request, session: SessionDep) -> HTML
 async def update(item_id: int, request: Request, session: SessionDep) -> HTMLResponse:
     form = await request.form()
     remove_photo = form.get("remove_photo") in ("true", "on", "1")
-    payload_data = strip_empty_strings(
+    payload_data = null_empty_strings(
         {k: v for k, v in form.items() if k not in ("photo", "remove_photo")}
     )
     try:

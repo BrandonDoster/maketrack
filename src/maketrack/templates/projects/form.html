@@ -59,10 +59,8 @@
     <span class="{{ lbl }}">Description</span>
     <textarea name="description" rows="3" class="{{ ic }}">{{ (project.description if project else '') or '' }}</textarea>
   </label>
-  <label class="block">
-    <span class="{{ lbl }}">Notes</span>
-    <textarea name="notes" rows="2" class="{{ ic }}">{{ (project.notes if project else '') or '' }}</textarea>
-  </label>
+  {# Notes live inline on the detail page now (it's the project journal),
+     so they're intentionally absent here. #}
   <div class="flex justify-between">
     <div>
       {% if project %}

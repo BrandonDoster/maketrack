@@ -6,7 +6,11 @@ from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from maketrack.db import get_session
-from maketrack.routes.ui._forms import format_validation_error, strip_empty_strings
+from maketrack.routes.ui._forms import (
+    format_validation_error,
+    null_empty_strings,
+    strip_empty_strings,
+)
 from maketrack.schemas.printer import PrinterCreate, PrinterUpdate
 from maketrack.services import printers as svc
 from maketrack.templating import templates
@@ -53,7 +57,7 @@ async def edit_form(printer_id: int, request: Request, session: SessionDep) -> H
 
 @router.post("/printers/{printer_id}", response_class=HTMLResponse)
 async def update(printer_id: int, request: Request, session: SessionDep) -> HTMLResponse:
-    form = strip_empty_strings(dict(await request.form()))
+    form = null_empty_strings(dict(await request.form()))
     try:
         payload = PrinterUpdate(**form)
     except ValidationError as exc:
