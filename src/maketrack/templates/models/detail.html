@@ -14,12 +14,13 @@
   </div>
 {% endif %}
 
-<header class="mb-6 flex items-start justify-between gap-6">
-  <div class="min-w-0 flex-1">
-    <a href="/models" class="text-sm text-slate-500 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400">← Models</a>
+<a href="/models" class="text-sm text-slate-500 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400">← Models</a>
 
+<div class="mt-3 grid grid-cols-1 gap-6 lg:grid-cols-2">
+  {# ── left column: name / fields / description / notes ─────────────── #}
+  <div class="min-w-0">
     {% if edit_mode %}
-      <form id="model-basic-form" method="post" action="/models/{{ model.id }}" class="mt-3 max-w-2xl space-y-4">
+      <form id="model-basic-form" method="post" action="/models/{{ model.id }}" class="space-y-4">
         <label class="block">
           <span class="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Name</span>
           <input type="text" name="name" required value="{{ model.name }}"
@@ -59,7 +60,7 @@
             onsubmit="return confirm('Delete this model? Asset files on disk will be cleaned up too.');"
             class="hidden"></form>
     {% else %}
-      <h1 class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{{ model.name }}</h1>
+      <h1 class="text-3xl font-semibold text-slate-900 dark:text-white">{{ model.name }}</h1>
       {% if model.source_type or model.source_url %}
         <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
           {% if model.source_type %}{{ model.source_type }}{% endif %}
@@ -75,70 +76,69 @@
           {% endfor %}
         </div>
       {% endif %}
+      {% if model.description %}
+        <p class="mt-4 whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300">{{ model.description }}</p>
+      {% endif %}
+      {% if model.notes %}
+        <div class="mt-4">
+          <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-500">Notes</h2>
+          <p class="mt-1 whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-400">{{ model.notes }}</p>
+        </div>
+      {% endif %}
     {% endif %}
   </div>
 
-  <div class="flex flex-shrink-0 flex-wrap justify-end gap-2">
-    {% if edit_mode %}
-      <button type="submit" form="model-delete-form" class="{{ btn_outline_danger }}">Delete model</button>
-      <button type="submit" form="model-basic-form" class="{{ btn_active }}">Done editing</button>
-    {% else %}
-      <a href="/models/{{ model.id }}?edit=true" class="{{ btn_outline }}">Edit page</a>
-    {% endif %}
+  {# ── right column: action buttons + preview ───────────────────────── #}
+  <div class="space-y-3">
+    <div class="flex flex-wrap justify-end gap-2">
+      {% if edit_mode %}
+        <button type="submit" form="model-delete-form" class="{{ btn_outline_danger }}">Delete model</button>
+        <button type="submit" form="model-basic-form" class="{{ btn_active }}">Done editing</button>
+      {% else %}
+        <a href="/models/{{ model.id }}?edit=true" class="{{ btn_outline }}">Edit page</a>
+      {% endif %}
+    </div>
+
+    <div class="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      {% if first_stl %}
+        <div id="stl-viewer"
+             data-stl-url="/media/{{ first_stl.file_path }}"
+             class="aspect-square w-full rounded bg-slate-100 dark:bg-slate-950"></div>
+        <p class="mt-2 text-xs text-slate-500">
+          Showing <span class="font-mono">{{ first_stl.filename }}</span>{% if stl_assets|length > 1 %} ({{ stl_assets|length - 1 }} more STL not shown){% endif %} · drag to orbit, scroll to zoom.
+        </p>
+        {# Lazy-loaded only on this detail page when an STL exists. The
+           importmap lets the addon files resolve their bare 'three' and
+           'three/addons/' specifiers against our vendored copies. #}
+        <script type="importmap">
+        {
+          "imports": {
+            "three": "/static/vendor/three/three.module.min.js",
+            "three/addons/": "/static/vendor/three/addons/"
+          }
+        }
+        </script>
+        <script type="module" src="/static/stl-viewer.js"></script>
+      {% elif thumbnail_path %}
+        <img src="/media/{{ thumbnail_path }}" alt="thumbnail"
+             class="aspect-square w-full rounded bg-slate-100 object-contain dark:bg-slate-950">
+        <p class="mt-2 text-xs text-slate-500">No STL uploaded yet — showing the embedded thumbnail.</p>
+      {% else %}
+        <div class="flex aspect-square w-full items-center justify-center rounded bg-slate-100 text-sm text-slate-500 dark:bg-slate-950">
+          Upload an STL or 3MF to see a preview.
+        </div>
+      {% endif %}
+    </div>
   </div>
-</header>
+</div>
 
 {% if upload_errors %}
-  <div class="mb-4 rounded border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-700 dark:bg-rose-950/40 dark:text-rose-200">
+  <div class="mt-6 rounded border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-700 dark:bg-rose-950/40 dark:text-rose-200">
     <ul class="list-disc pl-5">{% for err in upload_errors %}<li>{{ err }}</li>{% endfor %}</ul>
   </div>
 {% endif %}
 
-<section class="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
-  <div class="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-    {% if first_stl %}
-      <div id="stl-viewer"
-           data-stl-url="/media/{{ first_stl.file_path }}"
-           class="aspect-square w-full rounded bg-slate-100 dark:bg-slate-950"></div>
-      <p class="mt-2 text-xs text-slate-500">
-        Showing <span class="font-mono">{{ first_stl.filename }}</span>{% if stl_assets|length > 1 %} ({{ stl_assets|length - 1 }} more STL not shown){% endif %} · drag to orbit, scroll to zoom.
-      </p>
-      {# Lazy-loaded only on this detail page when an STL exists. The
-         importmap lets the addon files resolve their bare 'three' and
-         'three/addons/' specifiers against our vendored copies. #}
-      <script type="importmap">
-      {
-        "imports": {
-          "three": "/static/vendor/three/three.module.min.js",
-          "three/addons/": "/static/vendor/three/addons/"
-        }
-      }
-      </script>
-      <script type="module" src="/static/stl-viewer.js"></script>
-    {% elif thumbnail_path %}
-      <img src="/media/{{ thumbnail_path }}" alt="thumbnail"
-           class="aspect-square w-full rounded bg-slate-100 object-contain dark:bg-slate-950">
-      <p class="mt-2 text-xs text-slate-500">No STL uploaded yet — showing the embedded thumbnail.</p>
-    {% else %}
-      <div class="flex aspect-square w-full items-center justify-center rounded bg-slate-100 text-sm text-slate-500 dark:bg-slate-950">
-        Upload an STL or 3MF to see a preview.
-      </div>
-    {% endif %}
-  </div>
-
-  {% if not edit_mode %}
-    <div class="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-      <h2 class="text-base font-semibold text-slate-900 dark:text-white">Description</h2>
-      <p class="mt-2 whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300">{{ model.description or '—' }}</p>
-      {% if model.notes %}
-        <h3 class="mt-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Notes</h3>
-        <p class="mt-1 whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-400">{{ model.notes }}</p>
-      {% endif %}
-    </div>
-  {% endif %}
-</section>
-
-<section class="rounded-lg border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+<section class="mt-8 rounded-lg border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
   <div class="mb-4 flex items-end justify-between">
     <h2 class="text-lg font-semibold text-slate-900 dark:text-white">Assets ({{ assets|length }})</h2>
   </div>
