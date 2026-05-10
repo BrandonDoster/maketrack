@@ -27,31 +27,32 @@ def _parse_tags(raw: str | None) -> list[str]:
     return [t.strip() for t in raw.split(",") if t.strip()]
 
 
+_VALID_MODEL_VIEWS = ("cards", "details", "list")
+
+
 @router.get("/models", response_class=HTMLResponse)
-async def list_page(request: Request, session: SessionDep) -> HTMLResponse:
-    rows = await svc.list_models(session)
-    # Build a lightweight rollup the template can rely on without N more
-    # queries: per-model thumbnail file_path and the set of asset_types.
-    decorated = []
-    for m in rows:
-        assets = await svc.list_assets(session, m.id)
-        thumb_path = None
-        if m.thumbnail_asset_id is not None:
-            for a in assets:
-                if a.id == m.thumbnail_asset_id:
-                    thumb_path = a.file_path
-                    break
-        formats = sorted({a.asset_type for a in assets})
-        decorated.append(
-            {
-                "model": m,
-                "tags": svc.decode_tags(m.tags),
-                "thumbnail_path": thumb_path,
-                "formats": formats,
-                "asset_count": len(assets),
-            }
-        )
-    return templates.TemplateResponse(request, "models/list.html", {"items": decorated})
+async def list_page(
+    request: Request,
+    session: SessionDep,
+    view: str = "cards",
+    hide_project_models: bool = False,
+    tag: str | None = None,
+) -> HTMLResponse:
+    if view not in _VALID_MODEL_VIEWS:
+        view = "cards"
+    items = await svc.list_models_with_context(
+        session, tag=tag, hide_project_models=hide_project_models
+    )
+    return templates.TemplateResponse(
+        request,
+        "models/list.html",
+        {
+            "items": items,
+            "view": view,
+            "hide_project_models": hide_project_models,
+            "tag": tag,
+        },
+    )
 
 
 @router.get("/models/new", response_class=HTMLResponse)

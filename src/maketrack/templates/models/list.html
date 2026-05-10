@@ -2,6 +2,23 @@
 
 {% block title %}Models · MakeTrack{% endblock %}
 
+{% macro view_url(target_view) -%}
+?view={{ target_view }}{% if hide_project_models %}&hide_project_models=true{% endif %}{% if tag %}&tag={{ tag }}{% endif %}
+{%- endmacro %}
+
+{% macro filter_url() -%}
+?view={{ view }}{% if not hide_project_models %}&hide_project_models=true{% endif %}{% if tag %}&tag={{ tag }}{% endif %}
+{%- endmacro %}
+
+{% macro project_chip(it) -%}
+  {% if it.project_names %}
+    <span class="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-sky-800 dark:bg-sky-900/40 dark:text-sky-300"
+          title="Linked to: {{ it.project_names | join(', ') }}">
+      in {{ it.project_names|length }} project{{ '' if it.project_names|length == 1 else 's' }}
+    </span>
+  {% endif %}
+{%- endmacro %}
+
 {% block content %}
 <header class="mb-6 flex items-end justify-between">
   <div>
@@ -16,45 +33,162 @@
   </a>
 </header>
 
-<section class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-  {% for it in items %}
-    {% set m = it.model %}
-    <a href="/models/{{ m.id }}"
-       class="group block overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:border-emerald-500 hover:shadow dark:border-slate-800 dark:bg-slate-900 dark:hover:border-emerald-700">
-      <div class="aspect-square w-full bg-slate-100 dark:bg-slate-950">
-        {% if it.thumbnail_path %}
-          <img src="/media/{{ it.thumbnail_path }}" alt="" class="h-full w-full object-cover">
-        {% else %}
-          <div class="flex h-full w-full items-center justify-center text-slate-400 dark:text-slate-600">
-            <span class="text-sm">no thumbnail</span>
-          </div>
-        {% endif %}
-      </div>
-      <div class="p-4">
-        <h2 class="truncate text-base font-semibold text-slate-900 dark:text-white">{{ m.name }}</h2>
-        <p class="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">
-          {{ it.asset_count }} asset{{ '' if it.asset_count == 1 else 's' }}{% if m.source_type %} · {{ m.source_type }}{% endif %}
-        </p>
-        {% if it.formats %}
-          <div class="mt-2 flex flex-wrap gap-1">
-            {% for fmt in it.formats %}
-              <span class="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-mono uppercase text-slate-700 dark:bg-slate-800 dark:text-slate-300">{{ fmt }}</span>
-            {% endfor %}
-          </div>
-        {% endif %}
-        {% if it.tags %}
-          <div class="mt-2 flex flex-wrap gap-1">
-            {% for tag in it.tags %}
-              <span class="rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">{{ tag }}</span>
-            {% endfor %}
-          </div>
-        {% endif %}
-      </div>
-    </a>
-  {% else %}
-    <div class="col-span-full rounded-lg border border-dashed border-slate-300 p-12 text-center text-slate-500 dark:border-slate-800">
+{# ── view + filter toolbar ──────────────────────────────────────────── #}
+<div class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-2 text-sm dark:border-slate-800 dark:bg-slate-900">
+  <div class="flex items-center gap-1 text-xs">
+    {% set btn_active = "rounded bg-slate-200 px-3 py-1 font-medium text-slate-900 dark:bg-slate-700 dark:text-white" %}
+    {% set btn_idle = "rounded px-3 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white" %}
+    {% for v, label in [('cards', 'Cards'), ('details', 'Details'), ('list', 'List')] %}
+      <a href="{{ view_url(v) }}"
+         class="{{ btn_active if view == v else btn_idle }}">{{ label }}</a>
+    {% endfor %}
+  </div>
+  <a href="{{ filter_url() }}"
+     class="rounded px-3 py-1 text-xs {% if hide_project_models %}bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300{% else %}text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white{% endif %}">
+    {% if hide_project_models %}✓ {% endif %}hide project-scoped models
+  </a>
+</div>
+
+{% if not items %}
+  <div class="rounded-lg border border-dashed border-slate-300 p-12 text-center text-slate-500 dark:border-slate-800">
+    {% if hide_project_models %}
+      All your models are scoped to projects. Toggle the filter off to see them.
+    {% else %}
       No models yet. Create one to start uploading STL/STEP/3MF files.
-    </div>
-  {% endfor %}
-</section>
+    {% endif %}
+  </div>
+{% elif view == 'cards' %}
+  {# ── CARDS view ─────────────────────────────────────────────── #}
+  <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    {% for it in items %}
+      {% set m = it.model %}
+      <a href="/models/{{ m.id }}"
+         class="group block overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:border-emerald-500 hover:shadow dark:border-slate-800 dark:bg-slate-900 dark:hover:border-emerald-700">
+        <div class="aspect-square w-full bg-slate-100 dark:bg-slate-950">
+          {% if it.thumbnail_path %}
+            <img src="/media/{{ it.thumbnail_path }}" alt="" class="h-full w-full object-cover">
+          {% else %}
+            <div class="flex h-full w-full items-center justify-center text-slate-400 dark:text-slate-600">
+              <span class="text-sm">no thumbnail</span>
+            </div>
+          {% endif %}
+        </div>
+        <div class="p-4">
+          <div class="flex items-start justify-between gap-2">
+            <h2 class="truncate text-base font-semibold text-slate-900 dark:text-white">{{ m.name }}</h2>
+            {{ project_chip(it) }}
+          </div>
+          <p class="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">
+            {{ it.asset_count }} asset{{ '' if it.asset_count == 1 else 's' }}{% if m.source_type %} · {{ m.source_type }}{% endif %}
+          </p>
+          {% if it.formats %}
+            <div class="mt-2 flex flex-wrap gap-1">
+              {% for fmt in it.formats %}
+                <span class="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-mono uppercase text-slate-700 dark:bg-slate-800 dark:text-slate-300">{{ fmt }}</span>
+              {% endfor %}
+            </div>
+          {% endif %}
+          {% if it.tags %}
+            <div class="mt-2 flex flex-wrap gap-1">
+              {% for t in it.tags %}
+                <span class="rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">{{ t }}</span>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </div>
+      </a>
+    {% endfor %}
+  </section>
+
+{% elif view == 'details' %}
+  {# ── DETAILS view (Windows Explorer-style table) ────────────── #}
+  <section class="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
+    <table class="w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
+      <thead class="bg-slate-100 text-left text-xs uppercase tracking-wider text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+        <tr>
+          <th class="px-3 py-2 w-14"></th>
+          <th class="px-3 py-2">Name</th>
+          <th class="px-3 py-2">Source</th>
+          <th class="px-3 py-2">Formats</th>
+          <th class="px-3 py-2 text-right">Assets</th>
+          <th class="px-3 py-2">In projects</th>
+          <th class="px-3 py-2">Tags</th>
+          <th class="px-3 py-2">Updated</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-200 bg-white dark:divide-slate-800 dark:bg-slate-950">
+        {% for it in items %}
+          {% set m = it.model %}
+          <tr class="hover:bg-slate-50 dark:hover:bg-slate-900/50">
+            <td class="px-3 py-2">
+              <div class="h-10 w-10 overflow-hidden rounded bg-slate-100 dark:bg-slate-900">
+                {% if it.thumbnail_path %}
+                  <img src="/media/{{ it.thumbnail_path }}" alt="" class="h-full w-full object-cover">
+                {% endif %}
+              </div>
+            </td>
+            <td class="px-3 py-2 font-medium">
+              <a href="/models/{{ m.id }}" class="text-slate-900 hover:text-emerald-600 dark:text-white dark:hover:text-emerald-300">{{ m.name }}</a>
+            </td>
+            <td class="px-3 py-2 text-slate-500 dark:text-slate-400">{{ m.source_type or '—' }}</td>
+            <td class="px-3 py-2">
+              {% if it.formats %}
+                <div class="flex flex-wrap gap-1">
+                  {% for fmt in it.formats %}
+                    <span class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-mono uppercase text-slate-700 dark:bg-slate-800 dark:text-slate-300">{{ fmt }}</span>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <span class="text-slate-400 dark:text-slate-600">—</span>
+              {% endif %}
+            </td>
+            <td class="px-3 py-2 text-right tabular-nums text-slate-600 dark:text-slate-400">{{ it.asset_count }}</td>
+            <td class="px-3 py-2 text-xs text-slate-600 dark:text-slate-400">
+              {% if it.project_names %}
+                {{ it.project_names | join(', ') }}
+              {% else %}
+                <span class="text-slate-400 dark:text-slate-600">—</span>
+              {% endif %}
+            </td>
+            <td class="px-3 py-2">
+              {% if it.tags %}
+                <div class="flex flex-wrap gap-1">
+                  {% for t in it.tags %}
+                    <span class="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">{{ t }}</span>
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </td>
+            <td class="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">{{ m.updated_at.strftime('%Y-%m-%d') }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+{% else %}
+  {# ── LIST view (compact rows) ────────────────────────────────── #}
+  <section class="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
+    <ul class="divide-y divide-slate-200 bg-white text-sm dark:divide-slate-800 dark:bg-slate-950">
+      {% for it in items %}
+        {% set m = it.model %}
+        <li>
+          <a href="/models/{{ m.id }}"
+             class="flex items-center gap-3 px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-900/50">
+            <div class="h-7 w-7 shrink-0 overflow-hidden rounded bg-slate-100 dark:bg-slate-900">
+              {% if it.thumbnail_path %}
+                <img src="/media/{{ it.thumbnail_path }}" alt="" class="h-full w-full object-cover">
+              {% endif %}
+            </div>
+            <span class="min-w-0 flex-1 truncate text-slate-900 dark:text-white">{{ m.name }}</span>
+            {{ project_chip(it) }}
+            <span class="ml-auto whitespace-nowrap text-xs text-slate-500 dark:text-slate-400 tabular-nums">
+              {{ it.asset_count }} asset{{ '' if it.asset_count == 1 else 's' }}
+            </span>
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  </section>
+{% endif %}
 {% endblock %}

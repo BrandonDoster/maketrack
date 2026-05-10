@@ -538,9 +538,7 @@ async def test_description_renders_in_header_block_not_in_separate_card(
     """Description moved up next to the title (per UX feedback). The
     standalone Description card should be gone — there's only one place
     it can live now."""
-    project = await client.post(
-        "/api/projects", json={"name": "P", "description": "first pass"}
-    )
+    project = await client.post("/api/projects", json={"name": "P", "description": "first pass"})
     pid = project.json()["id"]
     detail = await client.get(f"/projects/{pid}")
     assert detail.status_code == 200
@@ -552,13 +550,9 @@ async def test_description_renders_in_header_block_not_in_separate_card(
 
 async def test_printer_renders_on_status_row(client: AsyncClient) -> None:
     """Printer info moved from below the title into the status row."""
-    p = await client.post(
-        "/api/printers", json={"name": "Voron 2.4", "model": "Voron 2.4 350"}
-    )
+    p = await client.post("/api/printers", json={"name": "Voron 2.4", "model": "Voron 2.4 350"})
     pid_printer = p.json()["id"]
-    project = await client.post(
-        "/api/projects", json={"name": "P", "printer_id": pid_printer}
-    )
+    project = await client.post("/api/projects", json={"name": "P", "printer_id": pid_printer})
     pid = project.json()["id"]
 
     detail = await client.get(f"/projects/{pid}")

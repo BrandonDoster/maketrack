@@ -228,3 +228,32 @@ All notable changes to this project will be documented here. Format roughly foll
   description inline, the printer in the status row, and the model
   status select; flipping status via HTMX persisted to `printed`;
   invalid `shipped` value silently ignored. 143 tests pass.
+
+### Models list — multiple views + project-scope filter
+- Each model card / row now carries an "in N project(s)" chip when
+  it's linked to one or more projects. Derived from `project_models`
+  at query time (no denormalization). Hover-title lists the project
+  names.
+- Three view modes for the models list, switchable via toolbar
+  buttons: **Cards** (current grid), **Details** (table with
+  thumbnail / name / source / formats / asset count / projects /
+  tags / updated_at — Windows Explorer-style), **List** (compact
+  one-line rows). Choice is URL-driven (`?view=details`) so views are
+  bookmarkable.
+- New filter: "hide project-scoped models" toggle. When on, models
+  attached to any project are excluded from the list — keeps the
+  global library a curated set of standalone designs (Printables /
+  Thingiverse / your own creations) without the noise of 30 small
+  parts that belong to a printer build. URL param
+  `?hide_project_models=true`; toolbar preserves view + filter across
+  toggles.
+- New service helper `list_models_with_context()` hydrates
+  thumbnail/formats/asset count/project names in three flat queries
+  instead of N+1.
+- Empty-state copy tells the user *why* the list is empty (e.g.
+  "All your models are scoped to projects. Toggle the filter off to
+  see them.") so the filter doesn't look like a bug.
+- Verified end-to-end through Docker: cards / details / list each
+  render their distinctive markup; "in 1 project" chip appears on
+  project-linked models; `hide_project_models=true` collapses the
+  list to just the standalone library model. 152 tests pass.
