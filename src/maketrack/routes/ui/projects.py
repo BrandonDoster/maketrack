@@ -276,6 +276,9 @@ async def add_model(project_id: int, request: Request, session: SessionDep) -> H
     return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
+_VALID_MODEL_LINK_STATUSES = frozenset({"pending", "printed", "failed"})
+
+
 @router.post("/projects/{project_id}/models/{model_id}/qty", response_class=HTMLResponse)
 async def update_model_qty(
     project_id: int, model_id: int, request: Request, session: SessionDep
@@ -291,6 +294,31 @@ async def update_model_qty(
         try:
             await link_svc.update_model_link(
                 session, project_id, model_id, ProjectModelLinkUpdate(qty_to_print=qty)
+            )
+            await session.commit()
+        except NotFoundError:
+            pass
+    if is_htmx(request):
+        return await _models_partial(request, project_id, session)
+    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/projects/{project_id}/models/{model_id}/status", response_class=HTMLResponse)
+async def update_model_status(
+    project_id: int, model_id: int, request: Request, session: SessionDep
+) -> HTMLResponse:
+    """Inline status edit for a project_model link.
+
+    The status (pending | printed | failed) belongs to the project link,
+    not the underlying Model — the same model can be 'pending' on one
+    project and 'printed' on another.
+    """
+    form = await request.form()
+    raw = (form.get("status") or "").strip()
+    if raw in _VALID_MODEL_LINK_STATUSES:
+        try:
+            await link_svc.update_model_link(
+                session, project_id, model_id, ProjectModelLinkUpdate(status=raw)
             )
             await session.commit()
         except NotFoundError:

@@ -532,6 +532,99 @@ async def test_edit_page_now_owns_photo_upload(
     assert f'action="/projects/{pid}/photo/completed"' in edit.text
 
 
+async def test_description_renders_in_header_block_not_in_separate_card(
+    client: AsyncClient,
+) -> None:
+    """Description moved up next to the title (per UX feedback). The
+    standalone Description card should be gone — there's only one place
+    it can live now."""
+    project = await client.post(
+        "/api/projects", json={"name": "P", "description": "first pass"}
+    )
+    pid = project.json()["id"]
+    detail = await client.get(f"/projects/{pid}")
+    assert detail.status_code == 200
+    assert "first pass" in detail.text
+    # The old "Description" header section is gone — there should be at most
+    # one "Description" string anywhere on the page (and ideally zero).
+    assert detail.text.count(">Description<") == 0
+
+
+async def test_printer_renders_on_status_row(client: AsyncClient) -> None:
+    """Printer info moved from below the title into the status row."""
+    p = await client.post(
+        "/api/printers", json={"name": "Voron 2.4", "model": "Voron 2.4 350"}
+    )
+    pid_printer = p.json()["id"]
+    project = await client.post(
+        "/api/projects", json={"name": "P", "printer_id": pid_printer}
+    )
+    pid = project.json()["id"]
+
+    detail = await client.get(f"/projects/{pid}")
+    # The printer name should appear once on the page, inside the status row.
+    assert "Voron 2.4" in detail.text
+
+
+async def test_notes_textarea_is_alpine_auto_growing(client: AsyncClient) -> None:
+    """The notes textarea uses Alpine to auto-resize on input. Smoke-check
+    the markup is wired up so we don't lose it on a rewrite."""
+    project = await client.post("/api/projects", json={"name": "P"})
+    pid = project.json()["id"]
+    detail = await client.get(f"/projects/{pid}")
+    assert "@input" in detail.text and "scrollHeight" in detail.text
+
+
+async def test_model_link_status_select_renders(client: AsyncClient) -> None:
+    project = await client.post("/api/projects", json={"name": "P"})
+    pid = project.json()["id"]
+    model = await client.post("/api/models", json={"name": "Bracket"})
+    mid = model.json()["id"]
+    await client.post(f"/api/projects/{pid}/models", json={"model_id": mid})
+
+    detail = await client.get(f"/projects/{pid}")
+    # The inline status form posts to /status; the select is wired up.
+    assert f"/projects/{pid}/models/{mid}/status" in detail.text
+
+
+async def test_model_status_inline_edit_persists(client: AsyncClient) -> None:
+    project = await client.post("/api/projects", json={"name": "P"})
+    pid = project.json()["id"]
+    model = await client.post("/api/models", json={"name": "Bracket"})
+    mid = model.json()["id"]
+    await client.post(f"/api/projects/{pid}/models", json={"model_id": mid})
+
+    resp = await client.post(
+        f"/projects/{pid}/models/{mid}/status",
+        data={"status": "printed"},
+        headers={"HX-Request": "true"},
+    )
+    assert resp.status_code == 200
+    assert 'id="models-section"' in resp.text
+
+    rows = (await client.get(f"/api/projects/{pid}/models")).json()
+    assert rows[0]["status"] == "printed"
+
+
+async def test_model_status_rejects_invalid_value(client: AsyncClient) -> None:
+    """Anything outside the pending|printed|failed set is silently ignored
+    so the row doesn't end up in a stuck/illegal state."""
+    project = await client.post("/api/projects", json={"name": "P"})
+    pid = project.json()["id"]
+    model = await client.post("/api/models", json={"name": "M"})
+    mid = model.json()["id"]
+    await client.post(f"/api/projects/{pid}/models", json={"model_id": mid})
+
+    await client.post(
+        f"/projects/{pid}/models/{mid}/status",
+        data={"status": "shipped"},
+        headers={"HX-Request": "true"},
+    )
+    rows = (await client.get(f"/api/projects/{pid}/models")).json()
+    # Status untouched — still pending (the default).
+    assert rows[0]["status"] == "pending"
+
+
 async def test_detail_page_renders_inline_widgets(client: AsyncClient) -> None:
     """The detail page should show qty inputs (not just text) and a notes textarea."""
     project = await client.post("/api/projects", json={"name": "Widgets"})

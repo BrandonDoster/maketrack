@@ -34,12 +34,20 @@
             <img src="/media/{{ h.thumbnail_path }}" alt="" class="h-full w-full rounded object-cover">
           {% endif %}
         </div>
-        <div class="min-w-0 flex-1">
-          <a href="/models/{{ h.model.id }}" class="block truncate font-medium text-slate-900 hover:text-emerald-600 dark:text-white dark:hover:text-emerald-300">{{ h.model.name }}</a>
-          <p class="text-xs text-slate-500">
-            {% if h.link.status %}{{ h.link.status }}{% endif %}
-          </p>
-        </div>
+        <a href="/models/{{ h.model.id }}" class="min-w-0 flex-1 truncate font-medium text-slate-900 hover:text-emerald-600 dark:text-white dark:hover:text-emerald-300">{{ h.model.name }}</a>
+        {# Inline status edit; HTMX submits on change. The link's status
+           ('pending' | 'printed' | 'failed') is per-project-print, not
+           a property of the model itself. #}
+        <select name="status"
+                hx-post="/projects/{{ project.id }}/models/{{ h.model.id }}/status"
+                hx-trigger="change"
+                hx-target="#models-section"
+                hx-swap="outerHTML"
+                class="rounded border border-slate-300 bg-white px-1.5 py-0.5 text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+          {% for s in ['pending', 'printed', 'failed'] %}
+            <option value="{{ s }}" {{ 'selected' if (h.link.status or 'pending') == s }}>{{ s }}</option>
+          {% endfor %}
+        </select>
         {# Inline qty_to_print edit; auto-submits via HTMX. #}
         <label class="flex items-center gap-1 text-xs text-slate-500">
           <span>×</span>

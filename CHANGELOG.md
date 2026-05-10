@@ -207,3 +207,24 @@ All notable changes to this project will be documented here. Format roughly foll
   page has the tabbed-thumbnail + lightbox markup and zero upload
   forms; edit page has both photo upload forms and zero notes
   textarea. 137 tests pass.
+
+### M6 polish round 3 (fourth feedback round)
+- Description moved out of its own card and into the project detail
+  header — sits between the title row and the status row, the way you'd
+  read it on a card. The standalone "Description" section is gone.
+- Printer info moved out of the title block and into the right side of
+  the status quick-action row, so the title is just title + status chip
+  + description.
+- Notes is now a single full-width section (no more side-by-side with
+  description) and the textarea auto-grows as the user types via Alpine
+  `@input` resizing.
+- Inline status select on each project_model row (pending / printed /
+  failed). New `POST /projects/{id}/models/{model_id}/status` endpoint
+  validates the value, rejects anything outside the allowed set, and
+  returns the models-section HTMX partial. The link's status belongs to
+  the project link — the same model can be 'pending' on one project and
+  'printed' on another.
+- Verified end-to-end through Docker: detail page rendered the
+  description inline, the printer in the status row, and the model
+  status select; flipping status via HTMX persisted to `printed`;
+  invalid `shipped` value silently ignored. 143 tests pass.
