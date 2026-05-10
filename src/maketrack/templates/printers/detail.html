@@ -3,6 +3,9 @@
 {% block title %}{{ printer.name }} · Printers · MakeTrack{% endblock %}
 
 {% block content %}
+{% set btn_outline = "rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800" %}
+{% set btn_active = "rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500" %}
+
 <header class="mb-6 flex items-start justify-between gap-6">
   <div class="flex-1">
     <a href="/printers" class="text-sm text-slate-500 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400">← Printers</a>
@@ -15,17 +18,19 @@
     {% if printer.notes %}
       <p class="mt-3 max-w-2xl whitespace-pre-line text-sm text-slate-600 dark:text-slate-300">{{ printer.notes }}</p>
     {% endif %}
-    <p class="mt-4 flex gap-4 text-sm">
-      <a href="/printers/{{ printer.id }}/edit" class="text-slate-600 hover:text-emerald-600 dark:text-slate-300 dark:hover:text-emerald-300">Edit details →</a>
-      {% if edit_mode %}
-        <a href="/printers/{{ printer.id }}" class="text-slate-600 hover:text-emerald-600 dark:text-slate-300 dark:hover:text-emerald-300">Done editing</a>
-      {% else %}
-        <a href="/printers/{{ printer.id }}?edit=true" class="text-slate-600 hover:text-emerald-600 dark:text-slate-300 dark:hover:text-emerald-300">Edit page</a>
-      {% endif %}
-    </p>
   </div>
 
-  <div class="w-56 flex-shrink-0">
+  <div class="flex flex-shrink-0 flex-col items-end gap-3">
+    <div class="flex gap-2">
+      <a href="/printers/{{ printer.id }}/edit" class="{{ btn_outline }}">Edit details</a>
+      {% if edit_mode %}
+        <a href="/printers/{{ printer.id }}" class="{{ btn_active }}">Done editing</a>
+      {% else %}
+        <a href="/printers/{{ printer.id }}?edit=true" class="{{ btn_outline }}">Edit page</a>
+      {% endif %}
+    </div>
+
+    <div class="w-56">
     {% if printer.photo_path %}
       <img src="/media/{{ printer.photo_path }}" alt="{{ printer.name }}"
            class="h-56 w-56 rounded-lg border border-slate-300 object-cover dark:border-slate-700">
@@ -44,6 +49,7 @@
         <button class="mt-2 rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-500">Upload</button>
       </form>
     {% endif %}
+    </div>
   </div>
 </header>
 

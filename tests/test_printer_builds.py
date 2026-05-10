@@ -63,6 +63,33 @@ async def test_detail_edit_mode_reveals_forms(client: AsyncClient) -> None:
     assert "No photo yet" in resp.text
 
 
+async def test_edit_page_button_active_state(client: AsyncClient) -> None:
+    """The Edit page button is an outline button in read mode and a
+    solid emerald button when on the edit-mode layout — visual signal
+    that you're currently editing."""
+    pid = await _new_printer(client)
+
+    read = await client.get(f"/printers/{pid}")
+    assert ">Edit page<" in read.text
+    # Outline (border + slate text) on the toggle in read mode.
+    assert "border-slate-300" in read.text
+    # No "Done editing" label in read mode.
+    assert "Done editing" not in read.text
+
+    edit = await client.get(f"/printers/{pid}?edit=true")
+    assert ">Done editing<" in edit.text
+    # Active emerald background on the toggle in edit mode (the same
+    # btn_active class is reused elsewhere, so just check the label
+    # appears alongside the active class on a single anchor).
+    import re
+
+    match = re.search(
+        r'<a[^>]+href="/printers/\d+"[^>]+class="[^"]*bg-emerald-600[^"]*"[^>]*>\s*Done editing\s*</a>',
+        edit.text,
+    )
+    assert match, "Done editing button should carry the active emerald style"
+
+
 async def test_printer_photo_upload_and_remove(client: AsyncClient) -> None:
     pid = await _new_printer(client)
 
