@@ -10,7 +10,6 @@ from maketrack.routes.ui._forms import (
     format_validation_error,
     null_empty_strings,
     query_string,
-    strip_empty_strings,
 )
 from maketrack.schemas.model import ModelCreate, ModelUpdate
 from maketrack.services import assets as asset_svc
@@ -21,6 +20,10 @@ from maketrack.templating import templates
 
 router = APIRouter(tags=["ui-models"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
+# Placeholder name for stubs created by the "+ New model" button. The
+# user lands on the detail page in edit mode and is expected to rename.
+DRAFT_MODEL_NAME = "New model"
 
 
 def _parse_tags(raw: str | None) -> list[str]:
@@ -113,37 +116,28 @@ async def save_preferences(request: Request) -> HTMLResponse:
     return response
 
 
-@router.get("/models/new", response_class=HTMLResponse)
-async def new_form(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(
-        request, "models/form.html", {"model": None, "tags_str": "", "errors": None}
+@router.post("/models/new", response_class=HTMLResponse)
+async def create_draft(session: SessionDep) -> HTMLResponse:
+    """Create a stub model and drop the user on its detail page in edit
+    mode. Replaces the standalone create-model form."""
+    model = await svc.create_model(session, ModelCreate(name=DRAFT_MODEL_NAME))
+    await session.commit()
+    return RedirectResponse(
+        url=f"/models/{model.id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
     )
 
 
-@router.post("/models", response_class=HTMLResponse)
-async def create(request: Request, session: SessionDep) -> HTMLResponse:
-    form = strip_empty_strings(dict(await request.form()))
-    tags = _parse_tags(form.pop("tags", None))
-    try:
-        payload = ModelCreate(**form, tags=tags)
-    except ValidationError as exc:
-        return templates.TemplateResponse(
-            request,
-            "models/form.html",
-            {
-                "model": None,
-                "tags_str": ", ".join(tags),
-                "errors": [format_validation_error(e) for e in exc.errors()],
-            },
-            status_code=status.HTTP_400_BAD_REQUEST,
-        )
-    model = await svc.create_model(session, payload)
-    await session.commit()
-    return RedirectResponse(url=f"/models/{model.id}", status_code=status.HTTP_303_SEE_OTHER)
-
-
-@router.get("/models/{model_id}", response_class=HTMLResponse)
-async def detail_page(model_id: int, request: Request, session: SessionDep) -> HTMLResponse:
+async def _render_detail(
+    request: Request,
+    session: AsyncSession,
+    model_id: int,
+    *,
+    edit_mode: bool,
+    errors: list[str] | None = None,
+    upload_errors: list[str] | None = None,
+    tags_override: list[str] | None = None,
+    status_code: int = status.HTTP_200_OK,
+) -> HTMLResponse:
     model = await svc.get_model(session, model_id)
     assets = await svc.list_assets(session, model_id)
     thumb_path = None
@@ -153,54 +147,66 @@ async def detail_page(model_id: int, request: Request, session: SessionDep) -> H
                 thumb_path = a.file_path
                 break
     stl_assets = [a for a in assets if a.asset_type == "stl"]
+    tags = tags_override if tags_override is not None else svc.decode_tags(model.tags)
     return templates.TemplateResponse(
         request,
         "models/detail.html",
         {
             "model": model,
-            "tags": svc.decode_tags(model.tags),
+            "tags": tags,
+            "tags_str": ", ".join(tags),
             "assets": assets,
             "thumbnail_path": thumb_path,
             "stl_assets": stl_assets,
             "first_stl": stl_assets[0] if stl_assets else None,
+            "edit_mode": edit_mode,
+            "errors": errors,
+            "upload_errors": upload_errors,
         },
+        status_code=status_code,
     )
 
 
-@router.get("/models/{model_id}/edit", response_class=HTMLResponse)
-async def edit_form(model_id: int, request: Request, session: SessionDep) -> HTMLResponse:
-    model = await svc.get_model(session, model_id)
-    return templates.TemplateResponse(
-        request,
-        "models/form.html",
-        {
-            "model": model,
-            "tags_str": ", ".join(svc.decode_tags(model.tags)),
-            "errors": None,
-        },
-    )
+@router.get("/models/{model_id}", response_class=HTMLResponse)
+async def detail_page(
+    model_id: int,
+    request: Request,
+    session: SessionDep,
+    edit: bool = False,
+) -> HTMLResponse:
+    return await _render_detail(request, session, model_id, edit_mode=edit)
 
 
 @router.post("/models/{model_id}", response_class=HTMLResponse)
 async def update(model_id: int, request: Request, session: SessionDep) -> HTMLResponse:
-    form = null_empty_strings(dict(await request.form()))
+    raw_form = dict(await request.form())
+    if not (raw_form.get("name") or "").strip():
+        return await _render_detail(
+            request,
+            session,
+            model_id,
+            edit_mode=True,
+            errors=["Name is required."],
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    form = null_empty_strings(raw_form)
     tags = _parse_tags(form.pop("tags", None))
     try:
         payload = ModelUpdate(**form, tags=tags)
     except ValidationError as exc:
-        model = await svc.get_model(session, model_id)
-        return templates.TemplateResponse(
+        return await _render_detail(
             request,
-            "models/form.html",
-            {
-                "model": model,
-                "tags_str": ", ".join(tags),
-                "errors": [format_validation_error(e) for e in exc.errors()],
-            },
+            session,
+            model_id,
+            edit_mode=True,
+            errors=[format_validation_error(e) for e in exc.errors()],
+            tags_override=tags,
             status_code=status.HTTP_400_BAD_REQUEST,
         )
     await svc.update_model(session, model_id, payload)
     await session.commit()
+    # "Done editing" submits this form — exit to read mode.
     return RedirectResponse(url=f"/models/{model_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -232,31 +238,17 @@ async def upload(
     if saved:
         await session.commit()
     if errors:
-        # Re-render detail with errors so the user sees what failed.
-        model = await svc.get_model(session, model_id)
-        assets = await svc.list_assets(session, model_id)
-        thumb_path = None
-        if model.thumbnail_asset_id:
-            for a in assets:
-                if a.id == model.thumbnail_asset_id:
-                    thumb_path = a.file_path
-                    break
-        stl_assets = [a for a in assets if a.asset_type == "stl"]
-        return templates.TemplateResponse(
+        return await _render_detail(
             request,
-            "models/detail.html",
-            {
-                "model": model,
-                "tags": svc.decode_tags(model.tags),
-                "assets": assets,
-                "thumbnail_path": thumb_path,
-                "stl_assets": stl_assets,
-                "first_stl": stl_assets[0] if stl_assets else None,
-                "upload_errors": errors,
-            },
+            session,
+            model_id,
+            edit_mode=True,
+            upload_errors=errors,
             status_code=status.HTTP_400_BAD_REQUEST,
         )
-    return RedirectResponse(url=f"/models/{model_id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        url=f"/models/{model_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
+    )
 
 
 @router.post("/models/{model_id}/thumbnail/{asset_id}", response_class=HTMLResponse)
@@ -264,9 +256,13 @@ async def set_thumbnail(model_id: int, asset_id: int, session: SessionDep) -> HT
     try:
         await asset_svc.set_thumbnail(session, model_id, asset_id)
     except UploadError:
-        return RedirectResponse(url=f"/models/{model_id}", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(
+            url=f"/models/{model_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
+        )
     await session.commit()
-    return RedirectResponse(url=f"/models/{model_id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        url=f"/models/{model_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
+    )
 
 
 @router.post("/assets/{asset_id}/delete", response_class=HTMLResponse)
@@ -276,4 +272,6 @@ async def delete_asset(asset_id: int, session: SessionDep) -> HTMLResponse:
     file_path = await asset_svc.delete_asset(session, asset_id)
     await session.commit()
     delete_upload(file_path)
-    return RedirectResponse(url=f"/models/{model_id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        url=f"/models/{model_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
+    )

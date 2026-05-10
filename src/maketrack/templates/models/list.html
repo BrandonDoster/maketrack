@@ -27,10 +27,12 @@
       {{ items|length }} model{{ '' if items|length == 1 else 's' }} · STL, STEP, 3MF and gcode files grouped per print.
     </p>
   </div>
-  <a href="/models/new"
-     class="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500">
-    + New model
-  </a>
+  <form method="post" action="/models/new">
+    <button type="submit"
+            class="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500">
+      + New model
+    </button>
+  </form>
 </header>
 
 {# ── view + filter toolbar ──────────────────────────────────────────── #}
