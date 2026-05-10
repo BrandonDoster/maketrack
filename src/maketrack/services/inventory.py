@@ -1,11 +1,29 @@
 from collections.abc import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from maketrack.errors import NotFoundError
 from maketrack.models.inventory import InventoryItem
 from maketrack.schemas.inventory import InventoryItemCreate, InventoryItemUpdate
+
+
+def _filter_stmt(
+    stmt: Select,
+    *,
+    category: str | None,
+    search: str | None,
+    below_reorder: bool,
+) -> Select:
+    if category is not None:
+        stmt = stmt.where(InventoryItem.category == category)
+    if search:
+        stmt = stmt.where(InventoryItem.name.icontains(search))
+    if below_reorder:
+        stmt = stmt.where(InventoryItem.reorder_threshold.is_not(None)).where(
+            InventoryItem.quantity <= InventoryItem.reorder_threshold
+        )
+    return stmt
 
 
 async def list_items(
@@ -14,18 +32,34 @@ async def list_items(
     category: str | None = None,
     search: str | None = None,
     below_reorder: bool = False,
+    page: int | None = None,
+    page_size: int | None = None,
 ) -> Sequence[InventoryItem]:
-    stmt = select(InventoryItem).order_by(InventoryItem.name)
-    if category is not None:
-        stmt = stmt.where(InventoryItem.category == category)
-    if search:
-        stmt = stmt.where(InventoryItem.name.icontains(search))
-    if below_reorder:
-        # Items where a threshold is set and current quantity is at or below it.
-        stmt = stmt.where(InventoryItem.reorder_threshold.is_not(None)).where(
-            InventoryItem.quantity <= InventoryItem.reorder_threshold
-        )
+    stmt = _filter_stmt(
+        select(InventoryItem).order_by(InventoryItem.name),
+        category=category,
+        search=search,
+        below_reorder=below_reorder,
+    )
+    if page is not None and page_size is not None:
+        stmt = stmt.limit(page_size).offset(max(0, (page - 1) * page_size))
     return (await session.execute(stmt)).scalars().all()
+
+
+async def count_items(
+    session: AsyncSession,
+    *,
+    category: str | None = None,
+    search: str | None = None,
+    below_reorder: bool = False,
+) -> int:
+    base = _filter_stmt(
+        select(InventoryItem.id),
+        category=category,
+        search=search,
+        below_reorder=below_reorder,
+    )
+    return (await session.execute(select(func.count()).select_from(base.subquery()))).scalar_one()
 
 
 async def get_item(session: AsyncSession, item_id: int) -> InventoryItem:

@@ -1,0 +1,32 @@
+{# Pagination footer.
+   Expects in context:
+     page       — services._pagination.Page instance
+     query_base — URL-encoded "k=v&k=v" of every filter except `page`
+                  (already trimmed of empty/None values)
+
+   Renders nothing when total fits on one page.
+#}
+{% if page.total > page.page_size %}
+  {% set sep = '&' if query_base else '' %}
+  <nav class="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-500 dark:text-slate-400">
+    <span>
+      <span class="tabular-nums">{{ page.first_index }}–{{ page.last_index }}</span>
+      of <span class="tabular-nums">{{ page.total }}</span>
+      <span class="text-xs">· page {{ page.page }} of {{ page.total_pages }}</span>
+    </span>
+    <div class="flex gap-1">
+      {% set chip_active = "rounded border border-slate-300 px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800" %}
+      {% set chip_disabled = "rounded border border-slate-200 px-3 py-1 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-600" %}
+      {% if page.has_prev %}
+        <a href="?{{ query_base }}{{ sep }}page={{ page.page - 1 }}" class="{{ chip_active }}">← Prev</a>
+      {% else %}
+        <span class="{{ chip_disabled }}">← Prev</span>
+      {% endif %}
+      {% if page.has_next %}
+        <a href="?{{ query_base }}{{ sep }}page={{ page.page + 1 }}" class="{{ chip_active }}">Next →</a>
+      {% else %}
+        <span class="{{ chip_disabled }}">Next →</span>
+      {% endif %}
+    </div>
+  </nav>
+{% endif %}

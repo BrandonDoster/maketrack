@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from maketrack.db import utcnow
@@ -17,15 +17,15 @@ def assert_writable(filament: Filament) -> None:
         )
 
 
-async def list_filaments(
-    session: AsyncSession,
+def _filter_stmt(
+    stmt: Select,
     *,
-    material: str | None = None,
-    source: str | None = None,
-    search: str | None = None,
-    include_archived: bool = False,
-) -> Sequence[Filament]:
-    stmt = select(Filament)
+    material: str | None,
+    source: str | None,
+    search: str | None,
+    include_archived: bool,
+) -> Select:
+    """Shared SQL-side filter logic so list + count stay in sync."""
     if material is not None:
         stmt = stmt.where(Filament.material == material)
     if source is not None:
@@ -34,9 +34,48 @@ async def list_filaments(
         stmt = stmt.where(Filament.name.icontains(search))
     if not include_archived:
         stmt = stmt.where(Filament.archived_at.is_(None))
-    stmt = stmt.order_by(Filament.id)
+    return stmt
+
+
+async def list_filaments(
+    session: AsyncSession,
+    *,
+    material: str | None = None,
+    source: str | None = None,
+    search: str | None = None,
+    include_archived: bool = False,
+    page: int | None = None,
+    page_size: int | None = None,
+) -> Sequence[Filament]:
+    stmt = _filter_stmt(
+        select(Filament),
+        material=material,
+        source=source,
+        search=search,
+        include_archived=include_archived,
+    ).order_by(Filament.id)
+    if page is not None and page_size is not None:
+        stmt = stmt.limit(page_size).offset(max(0, (page - 1) * page_size))
     result = await session.execute(stmt)
     return result.scalars().all()
+
+
+async def count_filaments(
+    session: AsyncSession,
+    *,
+    material: str | None = None,
+    source: str | None = None,
+    search: str | None = None,
+    include_archived: bool = False,
+) -> int:
+    base = _filter_stmt(
+        select(Filament.id),
+        material=material,
+        source=source,
+        search=search,
+        include_archived=include_archived,
+    )
+    return (await session.execute(select(func.count()).select_from(base.subquery()))).scalar_one()
 
 
 async def distinct_materials(session: AsyncSession) -> Sequence[str]:

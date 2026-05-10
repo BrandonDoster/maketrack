@@ -35,3 +35,19 @@ def is_htmx(request) -> bool:
     (regular form post fallback).
     """
     return request.headers.get("hx-request", "").lower() == "true"
+
+
+def query_string(params: dict) -> str:
+    """URL-encode a dict into a query string, dropping None / empty / False
+    values. Used to preserve search + filter state on prev/next pagination
+    links so the user doesn't lose context when paging.
+    """
+    from urllib.parse import quote
+
+    parts: list[str] = []
+    for key, value in params.items():
+        if value is None or value == "" or value is False:
+            continue
+        encoded = "true" if value is True else quote(str(value), safe="")
+        parts.append(f"{key}={encoded}")
+    return "&".join(parts)

@@ -9,11 +9,13 @@ from maketrack.db import get_session
 from maketrack.routes.ui._forms import (
     format_validation_error,
     null_empty_strings,
+    query_string,
     strip_empty_strings,
 )
 from maketrack.schemas.model import ModelCreate, ModelUpdate
 from maketrack.services import assets as asset_svc
 from maketrack.services import models as svc
+from maketrack.services._pagination import DEFAULT_PAGE_SIZE
 from maketrack.services.uploads import UploadError, delete_upload
 from maketrack.templating import templates
 
@@ -57,21 +59,37 @@ async def list_page(
     hide_project_models: bool | None = None,
     tag: str | None = None,
     q: str | None = None,
+    page: int | None = None,
 ) -> HTMLResponse:
     view = _resolve_view(view, request)
     hide_resolved = _resolve_hide(hide_project_models, request)
-    items = await svc.list_models_with_context(
-        session, tag=tag, hide_project_models=hide_resolved, search=q
+    page_obj = await svc.list_models_with_context(
+        session,
+        tag=tag,
+        hide_project_models=hide_resolved,
+        search=q,
+        page=page,
+        page_size=DEFAULT_PAGE_SIZE,
+    )
+    query_base = query_string(
+        {
+            "view": view,
+            "hide_project_models": hide_resolved,
+            "tag": tag,
+            "q": q,
+        }
     )
     return templates.TemplateResponse(
         request,
         "models/list.html",
         {
-            "items": items,
+            "items": page_obj.items,
             "view": view,
             "hide_project_models": hide_resolved,
             "tag": tag,
             "q": q or "",
+            "page": page_obj,
+            "query_base": query_base,
         },
     )
 

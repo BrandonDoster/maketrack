@@ -9,10 +9,12 @@ from maketrack.db import get_session
 from maketrack.routes.ui._forms import (
     format_validation_error,
     null_empty_strings,
+    query_string,
     strip_empty_strings,
 )
 from maketrack.schemas.inventory import InventoryItemCreate, InventoryItemUpdate
 from maketrack.services import inventory as svc
+from maketrack.services._pagination import DEFAULT_PAGE_SIZE, Page, normalize_page
 from maketrack.services.uploads import UploadError, delete_upload, save_photo
 from maketrack.templating import templates
 
@@ -32,13 +34,25 @@ async def list_page(
     q: str | None = None,
     category: str | None = None,
     below_reorder: bool = False,
+    page: int | None = None,
 ) -> HTMLResponse:
+    filter_kwargs = {
+        "search": q,
+        "category": category or None,
+        "below_reorder": below_reorder,
+    }
+    total = await svc.count_items(session, **filter_kwargs)
+    current_page = normalize_page(page, total, DEFAULT_PAGE_SIZE)
     items = await svc.list_items(
-        session,
-        search=q,
-        category=category or None,
-        below_reorder=below_reorder,
+        session, **filter_kwargs, page=current_page, page_size=DEFAULT_PAGE_SIZE
     )
+    page_obj: Page = Page(
+        items=list(items),
+        total=total,
+        page=current_page,
+        page_size=DEFAULT_PAGE_SIZE,
+    )
+    query_base = query_string({"q": q, "category": category, "below_reorder": below_reorder})
     return templates.TemplateResponse(
         request,
         "inventory/list.html",
@@ -47,6 +61,8 @@ async def list_page(
             "q": q or "",
             "selected_category": category or "",
             "below_reorder": below_reorder,
+            "page": page_obj,
+            "query_base": query_base,
         },
     )
 

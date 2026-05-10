@@ -9,6 +9,7 @@ from maketrack.errors import NotFoundError
 from maketrack.models.model import Model, ModelAsset
 from maketrack.models.project import Project, ProjectModel
 from maketrack.schemas.model import ModelCreate, ModelUpdate
+from maketrack.services._pagination import DEFAULT_PAGE_SIZE, Page, normalize_page
 
 
 @dataclass(slots=True)
@@ -72,9 +73,16 @@ async def list_models_with_context(
     source_type: str | None = None,
     search: str | None = None,
     hide_project_models: bool = False,
-) -> list[ModelListEntry]:
+    page: int | None = None,
+    page_size: int | None = None,
+) -> Page[ModelListEntry]:
     """Like list_models but pulls in the data the list page needs in three
     flat queries rather than one-per-model.
+
+    Returns a Page so the caller has both the slice and the post-filter
+    total in one call. tag + hide_project_models are Python-side filters
+    (because tags are JSON-as-text and the project-link gate compares
+    against a join), so the page slice happens after that filter pass.
     """
     stmt = select(Model).order_by(Model.name)
     if source_type is not None:
@@ -83,7 +91,8 @@ async def list_models_with_context(
         stmt = stmt.where(Model.name.icontains(search))
     models = list((await session.execute(stmt)).scalars().all())
     if not models:
-        return []
+        effective_size = page_size if page_size is not None else DEFAULT_PAGE_SIZE
+        return Page(items=[], total=0, page=1, page_size=effective_size)
 
     model_ids = [m.id for m in models]
 
@@ -133,7 +142,21 @@ async def list_models_with_context(
                 project_names=sorted(project_names),
             )
         )
-    return out
+
+    total = len(out)
+    effective_size = page_size if page_size is not None else max(total, DEFAULT_PAGE_SIZE)
+    if page is None:
+        # No pagination requested — single "page" with everything on it.
+        return Page(items=out, total=total, page=1, page_size=effective_size)
+
+    current_page = normalize_page(page, total, effective_size)
+    start = (current_page - 1) * effective_size
+    return Page(
+        items=out[start : start + effective_size],
+        total=total,
+        page=current_page,
+        page_size=effective_size,
+    )
 
 
 async def get_model(session: AsyncSession, model_id: int) -> Model:

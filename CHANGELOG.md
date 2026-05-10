@@ -327,3 +327,36 @@ All notable changes to this project will be documented here. Format roughly foll
 - Verified end-to-end through Docker: all five lists filtered
   correctly, empty states rendered the search query, "below reorder"
   collapsed to just the under-threshold item. 185 tests pass.
+
+### M9 — pagination
+- Pagination on the three lists that can grow without bound: filaments,
+  inventory, models. Default page size 50, override via `?page=N`.
+  Skip on projects + printers (low cardinality, per spec).
+- New `services/_pagination.py` with a `Page[T]` dataclass that owns
+  the math (`has_prev`, `has_next`, `total_pages`, `first_index`,
+  `last_index`) plus `normalize_page()` that clamps out-of-range page
+  numbers to the last valid page so a stale bookmark never 404s.
+- `count_filaments()` / `count_items()` siblings share their filter
+  builder with the list functions so total counts always reflect the
+  same WHERE clauses as the rendered slice. `list_models_with_context`
+  now returns a `Page[ModelListEntry]` directly — the in-Python filter
+  pass (tag, hide-project) produces both the slice and the count.
+- `_pagination.html` partial: prev/next chips with a disabled state at
+  edges, "first–last of total · page X of Y" copy. Renders nothing
+  when total fits on one page so small lists stay clean.
+- Query-string preservation: each route builds a `query_base` with all
+  current filters via a new `query_string()` helper in `_forms.py`
+  that drops empty/None/False values; the partial concatenates
+  `?{query_base}&page=N`. Search, view, hide-project, category,
+  below-reorder, etc. all carry across page navigation.
+- Existing service signatures stay backward-compatible — `page` /
+  `page_size` are optional keyword-only args that default to None,
+  meaning "no pagination, return everything." MCP tools and JSON
+  routes continue to return all rows.
+- Tests cover the Page math at edges, page=1 / page=2 / page=99
+  clamping, no-footer-on-small-lists, and query-string preservation
+  across search + view + filter combinations.
+- Verified end-to-end through Docker with 75 seeded inventory rows:
+  page 1 shows "page 1 of 2", page 2 shows "page 2 of 2", page=99
+  clamps to page 2, category filter survives prev-page navigation.
+  195 tests pass.

@@ -10,11 +10,13 @@ from maketrack.errors import RemoteFilamentError
 from maketrack.routes.ui._forms import (
     format_validation_error,
     null_empty_strings,
+    query_string,
     strip_empty_strings,
 )
 from maketrack.schemas.filament import FilamentCreate, FilamentUpdate
 from maketrack.services import external_sources as sources_svc
 from maketrack.services import filaments as svc
+from maketrack.services._pagination import DEFAULT_PAGE_SIZE, Page, normalize_page
 from maketrack.sync import build_source, ensure_fresh_sources
 from maketrack.templating import templates
 
@@ -30,13 +32,28 @@ async def list_page(
     q: str | None = None,
     material: str | None = None,
     source: str | None = None,
+    page: int | None = None,
 ) -> HTMLResponse:
     await ensure_fresh_sources(get_sessionmaker(), source_factory=build_source)
+    filter_kwargs = {
+        "search": q,
+        "material": material or None,
+        "source": source or None,
+    }
+    total = await svc.count_filaments(session, **filter_kwargs)
+    current_page = normalize_page(page, total, DEFAULT_PAGE_SIZE)
     filaments = await svc.list_filaments(
-        session, search=q, material=material or None, source=source or None
+        session, **filter_kwargs, page=current_page, page_size=DEFAULT_PAGE_SIZE
     )
     enabled_sources = await sources_svc.list_sources(session, enabled_only=True)
     materials = await svc.distinct_materials(session)
+    page_obj: Page = Page(
+        items=list(filaments),
+        total=total,
+        page=current_page,
+        page_size=DEFAULT_PAGE_SIZE,
+    )
+    query_base = query_string({"q": q, "material": material, "source": source})
     return templates.TemplateResponse(
         request,
         "filaments/list.html",
@@ -47,6 +64,8 @@ async def list_page(
             "selected_material": material or "",
             "selected_source": source or "",
             "materials": materials,
+            "page": page_obj,
+            "query_base": query_base,
         },
     )
 
