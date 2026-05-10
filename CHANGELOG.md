@@ -472,3 +472,54 @@ All notable changes to this project will be documented here. Format roughly foll
 - Verified end-to-end through Docker: container starts clean from a
   fresh DB at revision 0006, detail page renders the cooling-upgrade
   card with project link and "Stealthburner duct ×2".
+
+### M13 — detail-page consistency (read/edit toggle)
+Cross-entity UX pass that took the read/edit pattern introduced for
+printers in M12 and applied it to projects and models, plus several
+follow-ups on the printer side. Every top-level entity now has the
+same detail-page shape.
+
+- **Convention.** `/printers/{id}`, `/models/{id}`, `/projects/{id}`
+  all default to a reading-style view. Adding `?edit=true` reveals
+  the editing affordances. Top-right corner has `[Edit page]`
+  outline button in read mode; in edit mode that becomes
+  `[Delete <thing>]` (outline red) + `[Done editing]` (solid
+  emerald, submit + exit to read in one click).
+- **Create flow.** `+ New <thing>` on each list page now POSTs to
+  `/<thing>/new`, which creates a stub row named "New <thing>"
+  and redirects to its detail page in edit mode. Standalone
+  `/new` form pages and `/<id>/edit` form pages are dropped, along
+  with the `form.html` templates that backed them.
+- **Sub-actions stay in edit mode.** All add / remove / photo-upload
+  / inline-edit / status-change / asset-upload endpoints redirect
+  back to `?edit=true` so the user can keep editing until they
+  explicitly click Done editing. HTMX swap responses still return
+  just the section partial — those always render in edit mode since
+  the user only reached them from edit mode.
+- **Notes consolidation.** The project's separate `/projects/{id}/notes`
+  quick-save endpoint is gone; notes is part of the basic-fields
+  form on the detail page now and commits with Done editing.
+- **Printer detail polish.** Three add-to-build paths on the printer
+  detail page (Add model / Add project / Add custom) — picking a
+  model or project seeds the build's name from theirs, no name
+  typing required. Build cards become clickable to their primary
+  target (project if set, otherwise the first linked model) via a
+  stretched link with hover affordance. Top-right buttons styled
+  consistently (outline → solid emerald when active).
+- **Models list polish.** The details-view rows are now clickable
+  anywhere on the row to open the model — matches how the cards
+  and list views work. The name `<a>` stays so keyboard nav and
+  right-click still work as expected.
+- **Layout polish on detail pages.** Models: the STL viewer /
+  thumbnail moved into the right column of the header so it sits
+  next to the basic-fields form (or name/info in read mode),
+  replacing the empty space that used to be there. Projects: the
+  tabbed photo thumbnail moved to the top-right corner alongside
+  the action buttons, with the upload + remove buttons following
+  the active tab (one Alpine `x-data` scope wraps both). The big
+  standalone Photos section in edit mode is gone.
+- 257 tests pass (up from 229). New tests cover the draft-create
+  flow on each entity, the edit-mode-toggle behavior, the
+  stay-in-edit-mode redirect semantics across all sub-actions,
+  the row click on the models details view, and the active-state
+  styling of the Done editing button.

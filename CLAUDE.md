@@ -595,6 +595,8 @@ On push of a tag matching `v*.*.*`:
 - **No raw SQL outside alembic migrations.** Use SQLAlchemy 2.0-style `select()` everywhere else.
 - **Service layer owns business rules.** Routes are thin: parse input, call service, render response. Read-only enforcement, sync logic, BOM rollups all live in services.
 - **Tests**: every route has a happy-path test. Service layer has unit tests for business rules. Sync engine has tests with a mocked Spoolman.
+- **Detail pages have a read/edit toggle.** `/projects/{id}`, `/models/{id}`, `/printers/{id}` all default to a reading-style view and reveal editing affordances when `?edit=true` is set. The top-right corner shows an "Edit page" outline button in read mode; in edit mode that becomes `[Delete <thing>]` (outline red) + `[Done editing]` (solid emerald, which submits the basic-fields form and exits to read mode). All add / remove / inline-edit sub-actions redirect back to `?edit=true` so the user stays editing until they click Done. Apply this pattern to any new top-level entity detail page.
+- **Create-flow uses a draft stub.** `+ New <thing>` on the list page POSTs to `/<thing>/new`, which creates a row named `"New <thing>"` and redirects to the detail page in edit mode. No standalone /new form templates.
 - **Commits**: conventional commits style (`feat:`, `fix:`, `chore:`, `docs:`). Squash on merge. The release workflow is tag-driven, not commit-message-driven.
 
 ## First-pass implementation order
