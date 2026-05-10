@@ -16,6 +16,8 @@ from maketrack.models import (  # noqa: F401  -- imported for metadata registrat
     Model,
     ModelAsset,
     Printer,
+    PrinterBuild,
+    PrinterBuildModel,
     Project,
     ProjectFilament,
     ProjectItem,

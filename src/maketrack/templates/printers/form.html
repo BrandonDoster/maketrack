@@ -4,7 +4,11 @@
 
 {% block content %}
 <header class="mb-6">
-  <a href="/printers" class="text-sm text-slate-500 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400">← Printers</a>
+  {% if printer %}
+    <a href="/printers/{{ printer.id }}" class="text-sm text-slate-500 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400">← {{ printer.name }}</a>
+  {% else %}
+    <a href="/printers" class="text-sm text-slate-500 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400">← Printers</a>
+  {% endif %}
   <h1 class="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">
     {{ 'Edit printer' if printer else 'New printer' }}
   </h1>

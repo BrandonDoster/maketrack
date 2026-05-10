@@ -3,7 +3,7 @@ from maketrack.models.filament import Filament
 from maketrack.models.inventory import InventoryItem
 from maketrack.models.location import Location
 from maketrack.models.model import Model, ModelAsset
-from maketrack.models.printer import Printer
+from maketrack.models.printer import Printer, PrinterBuild, PrinterBuildModel
 from maketrack.models.project import (
     Project,
     ProjectFilament,
@@ -19,6 +19,8 @@ __all__ = [
     "Model",
     "ModelAsset",
     "Printer",
+    "PrinterBuild",
+    "PrinterBuildModel",
     "Project",
     "ProjectFilament",
     "ProjectItem",

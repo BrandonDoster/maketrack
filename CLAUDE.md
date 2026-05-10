@@ -35,8 +35,7 @@ Local filament management is intentionally a fallback. Spoolman or other externa
 
 These are deferred but the data model should accommodate them so we don't end up doing destructive migrations later.
 
-- **Printer photo + mod list with project link.** A printer has zero or more mods. A mod has a name, optional notes, an optional photo, and an optional FK to a `projects.id` (the project that built/added the mod — useful when you printed your own riser feet). Schema sketch: `printer_mods (id, printer_id NOT NULL FK, name NOT NULL, description, photo_path, source_project_id FK projects, created_at, updated_at)`. Add `printers.photo_path TEXT NULL` for a primary printer photo.
-- **Inventory ↔ printer parts tracking.** A printer is partly an assembly of inventory items (heatset inserts, bolts, board, hotend, etc.). Track which items are currently installed in which printer so a teardown can reclaim them. Schema sketch: `printer_parts (id, printer_id FK CASCADE, inventory_item_id FK RESTRICT, qty NOT NULL DEFAULT 1, installed_at, removed_at NULL, notes)`. "Reclaim" UI bumps `removed_at`, increments `inventory_items.quantity` by `qty`.
+- **Inventory ↔ printer parts tracking.** A printer is partly an assembly of inventory items (heatset inserts, bolts, board, hotend, etc.). Track which items are currently installed in which printer so a teardown can reclaim them. Schema sketch: `printer_parts (id, printer_id FK CASCADE, inventory_item_id FK RESTRICT, qty NOT NULL DEFAULT 1, installed_at, removed_at NULL, notes)`. "Reclaim" UI bumps `removed_at`, increments `inventory_items.quantity` by `qty`. Likely shares the printer detail page with the existing build list.
 - **QR codes for items and bins.** When the location/item rows have stable URLs, render a QR code that decodes to the item or location detail page. Mobile flow: scan a bin QR, see what's in it; scan an item then a bin to move it; scan a bin while putting away an order to add new items there. Schema piece is in place — `locations.qr_code` is reserved for the encoded value, just unused for now.
 - **Location nesting in the UI.** The `locations.parent_id` self-FK exists in the schema but the management UI doesn't expose it. Add when nested storage (shelf → bins on the shelf) becomes worth the form complexity — likely paired with a "path" display in the inventory list and select.
 - **Slicer-aware filament estimator.** Today `project_filaments.est_weight_g` is hand-entered. Goal: (a) per-project preset (`standard`, `voron`, `prusa_strong`, etc.) that applies an `infill × walls` multiplier to the model's bounding-box volume + filament density to ballpark grams; (b) parse the slice metadata embedded in a 3MF (Bambu/Orca write `Metadata/slice_info.config` with `filament_used` per spool) and use that as the source of truth when present; (c) per-`project_filament` row override so the user can correct after weighing the spool. Schema sketch: `slicer_presets (id, name, infill_multiplier, wall_multiplier, density_g_cm3)`; new column `project_filaments.estimate_source TEXT` (`manual` | `preset:<name>` | `3mf` | `override`).
@@ -252,12 +251,56 @@ printers (
   model               TEXT,                     -- 'Voron 2.4', 'Bambu X1C', etc
   access_url          TEXT,                     -- generic URL to the printer's UI (Mainsail, OctoPrint, Bambu Studio, whatever)
   notes               TEXT,
+  photo_path          TEXT,                     -- primary photo, relative to /uploads
   created_at          TIMESTAMP,
   updated_at          TIMESTAMP
 )
 ```
 
 The "list of projects this printer is involved in" is a query against `projects.printer_id`, not a stored relationship.
+
+### printer_builds
+
+A printer's customizations and printed accessories. Each build entry can
+optionally point at the project that produced it and at one or many models
+that compose it (via `printer_build_models`). The UI labels this section
+"Build" — it's the cumulative state of mods, prints, and additions.
+
+```sql
+printer_builds (
+  id                  INTEGER PRIMARY KEY,
+  printer_id          INTEGER NOT NULL,
+  name                TEXT NOT NULL,
+  description         TEXT,
+  photo_path          TEXT,
+  source_project_id   INTEGER,
+  created_at          TIMESTAMP,
+  updated_at          TIMESTAMP,
+
+  FOREIGN KEY (printer_id) REFERENCES printers(id) ON DELETE CASCADE,
+  FOREIGN KEY (source_project_id) REFERENCES projects(id) ON DELETE SET NULL
+)
+```
+
+### printer_build_models
+
+Join row with qty + notes. Same shape as `project_models` minus the
+print-status workflow (a build entry isn't a print queue).
+
+```sql
+printer_build_models (
+  printer_build_id    INTEGER NOT NULL,
+  model_id            INTEGER NOT NULL,
+  qty                 INTEGER NOT NULL DEFAULT 1,
+  notes               TEXT,
+  created_at          TIMESTAMP,
+  updated_at          TIMESTAMP,
+
+  PRIMARY KEY (printer_build_id, model_id),
+  FOREIGN KEY (printer_build_id) REFERENCES printer_builds(id) ON DELETE CASCADE,
+  FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE RESTRICT
+)
+```
 
 ### models
 

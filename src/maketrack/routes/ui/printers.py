@@ -12,7 +12,9 @@ from maketrack.routes.ui._forms import (
     strip_empty_strings,
 )
 from maketrack.schemas.printer import PrinterCreate, PrinterUpdate
+from maketrack.services import printer_builds as build_svc
 from maketrack.services import printers as svc
+from maketrack.services.uploads import delete_upload
 from maketrack.templating import templates
 
 router = APIRouter(tags=["ui-printers"])
@@ -78,11 +80,22 @@ async def update(printer_id: int, request: Request, session: SessionDep) -> HTML
         )
     await svc.update_printer(session, printer_id, payload)
     await session.commit()
-    return RedirectResponse(url="/printers", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=f"/printers/{printer_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/printers/{printer_id}/delete", response_class=HTMLResponse)
 async def delete(printer_id: int, session: SessionDep) -> HTMLResponse:
+    # Walk the build photos before delete: CASCADE removes the rows but
+    # not the files on disk.
+    p = await svc.get_printer(session, printer_id)
+    photo_paths_to_drop = [p.photo_path]
+    builds = await build_svc.list_for_printer(session, printer_id)
+    photo_paths_to_drop.extend(b.photo_path for b in builds)
+
     await svc.delete_printer(session, printer_id)
     await session.commit()
+
+    for path in photo_paths_to_drop:
+        delete_upload(path)
+
     return RedirectResponse(url="/printers", status_code=status.HTTP_303_SEE_OTHER)

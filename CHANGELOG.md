@@ -420,3 +420,55 @@ All notable changes to this project will be documented here. Format roughly foll
   and asserts both that distinct strings collapse into the right
   number of locations rows and that NULLs stay NULL after the upgrade.
   216 tests pass.
+
+### M11 follow-up — alembic FK fix
+- Migration 0005 was crashing in production at the `DROP TABLE
+  inventory_items` step of the batch rebuild dance because the
+  `project_items → inventory_items` FK was still enforced; alembic's
+  internal FK toggle didn't survive our async + NullPool setup, where
+  the `_enable_sqlite_foreign_keys` event listener re-arms FKs on every
+  fresh connection.
+- Wrapped both the upgrade and the downgrade in explicit
+  `PRAGMA foreign_keys=OFF/ON`. The original test seeded
+  `inventory_items` but no `project_items` referencing them, so the FK
+  was never exercised — now seeds a project + project_items row first
+  and asserts the FK survives the rebuild. Verified the test catches
+  the regression by temporarily reverting the PRAGMA toggle.
+- Registered `Location` in alembic env.py for autogenerate.
+
+### M12 — printer build (photo + per-printer build list)
+- New `printer_builds` table: `id, printer_id FK CASCADE, name, description,
+  photo_path, source_project_id FK projects ON DELETE SET NULL`. Plus a
+  `printer_build_models` join (qty + notes; same shape as
+  `project_models` minus the print-status workflow). Each build entry can
+  link to a source project and to many models — the printed parts that
+  compose it.
+- Migration 0006 also adds `printers.photo_path` for a primary printer
+  photo. Both batch ops are wrapped in PRAGMA foreign_keys=OFF/ON,
+  matching the M11 fix.
+- New printer detail page at `/printers/{id}` with photo upload/remove,
+  inline form to add a build, and a card grid showing each build with its
+  photo, source project link, and the list of models with qty. The list
+  page now links rows to the detail page and shows a thumbnail when set.
+- Build edit page at `/printers/{id}/builds/{build_id}/edit` covers
+  name + description + source project + photo (with remove checkbox) plus
+  a model-link table with inline qty/notes editing and add/remove.
+- API at `/api/printers/{id}/builds` and `/api/printer-builds/{id}` for
+  CRUD; `/api/printer-builds/{id}/models` for linking. Linking an unknown
+  model returns 404; qty < 1 returns 422.
+- Photo cleanup: deleting a build removes its photo from disk; deleting
+  a printer walks its builds and removes both the printer photo and each
+  build photo (CASCADE drops the rows but not the files).
+- Section name decision: kept the table prefix `printer_builds` (renamed
+  from the spec's `printer_mods`) because the user labelled the UI
+  section "Build" — covers mods + printed parts + accessories together.
+- Removed the "Printer photo + mod list with project link" entry from
+  the CLAUDE.md Planned section. Updated the Inventory ↔ printer parts
+  entry to note it'll share the printer detail page.
+- 13 new tests cover detail render, photo upload+remove, API CRUD,
+  link/unlink, qty validation, the UI flow end-to-end (create build →
+  link model → see qty render on detail), CASCADE on printer delete,
+  SET NULL on source project delete. 229 tests pass.
+- Verified end-to-end through Docker: container starts clean from a
+  fresh DB at revision 0006, detail page renders the cooling-upgrade
+  card with project link and "Stealthburner duct ×2".

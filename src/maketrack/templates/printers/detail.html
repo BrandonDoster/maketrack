@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}{{ printer.name }} · Printers · MakeTrack{% endblock %}
+
+{% block content %}
+<header class="mb-6 flex items-start justify-between gap-6">
+  <div class="flex-1">
+    <a href="/printers" class="text-sm text-slate-500 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400">← Printers</a>
+    <h1 class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{{ printer.name }}</h1>
+    <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ printer.model or '—' }}</p>
+    {% if printer.access_url %}
+      <p class="mt-2"><a href="{{ printer.access_url }}" target="_blank" rel="noopener"
+                        class="text-sm text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300">Open printer UI ↗</a></p>
+    {% endif %}
+    {% if printer.notes %}
+      <p class="mt-3 max-w-2xl whitespace-pre-line text-sm text-slate-600 dark:text-slate-300">{{ printer.notes }}</p>
+    {% endif %}
+    <p class="mt-4">
+      <a href="/printers/{{ printer.id }}/edit" class="text-sm text-slate-600 hover:text-emerald-600 dark:text-slate-300 dark:hover:text-emerald-300">Edit details →</a>
+    </p>
+  </div>
+
+  <div class="w-56 flex-shrink-0">
+    {% if printer.photo_path %}
+      <img src="/media/{{ printer.photo_path }}" alt="{{ printer.name }}"
+           class="h-56 w-56 rounded-lg border border-slate-300 object-cover dark:border-slate-700">
+      <form method="post" action="/printers/{{ printer.id }}/photo/delete"
+            onsubmit="return confirm('Remove photo?');" class="mt-2 text-right">
+        <button class="text-xs text-rose-600 hover:text-rose-500 dark:text-rose-400 dark:hover:text-rose-300">Remove photo</button>
+      </form>
+    {% else %}
+      <form method="post" action="/printers/{{ printer.id }}/photo" enctype="multipart/form-data"
+            class="rounded-lg border border-dashed border-slate-300 p-4 text-center dark:border-slate-700">
+        <p class="text-xs text-slate-500 dark:text-slate-400">No photo yet</p>
+        <input type="file" name="photo" accept="image/jpeg,image/png,image/webp,image/gif"
+               class="mt-2 block w-full text-xs text-slate-700 file:mr-2 file:rounded file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs file:font-medium hover:file:bg-slate-200 dark:text-slate-300 dark:file:bg-slate-800 dark:hover:file:bg-slate-700">
+        <button class="mt-2 rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-500">Upload</button>
+      </form>
+    {% endif %}
+  </div>
+</header>
+
+<section class="mt-8">
+  <div class="mb-3 flex items-end justify-between">
+    <div>
+      <h2 class="text-xl font-semibold text-slate-900 dark:text-white">Build</h2>
+      <p class="text-sm text-slate-500 dark:text-slate-400">
+        Mods, printed parts, accessories — anything you've added or want to print for this printer.
+      </p>
+    </div>
+  </div>
+
+  {% set ic = "rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white" %}
+
+  <form method="post" action="/printers/{{ printer.id }}/builds"
+        class="mb-6 grid grid-cols-1 gap-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 sm:grid-cols-[1fr,1fr,auto]">
+    <input type="text" name="name" required placeholder="e.g. PEI bed, Stealthburner toolhead"
+           class="{{ ic }}">
+    <select name="source_project_id" class="{{ ic }}">
+      <option value="">— project (optional) —</option>
+      {% for p in available_projects %}
+        <option value="{{ p.id }}">{{ p.name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500">
+      Add to build
+    </button>
+  </form>
+
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    {% for b in builds %}
+      <article class="flex gap-4 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+        {% if b.photo_path %}
+          <img src="/media/{{ b.photo_path }}" alt=""
+               class="h-24 w-24 flex-shrink-0 rounded border border-slate-300 object-cover dark:border-slate-700">
+        {% else %}
+          <div class="h-24 w-24 flex-shrink-0 rounded border border-dashed border-slate-300 dark:border-slate-700"></div>
+        {% endif %}
+        <div class="min-w-0 flex-1">
+          <h3 class="font-medium text-slate-900 dark:text-white">{{ b.name }}</h3>
+          {% if b.description %}
+            <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">{{ b.description }}</p>
+          {% endif %}
+          {% if b.source_project %}
+            <p class="mt-1 text-xs">
+              <span class="text-slate-500 dark:text-slate-400">project:</span>
+              <a href="/projects/{{ b.source_project.id }}" class="text-emerald-600 hover:text-emerald-500 dark:text-emerald-400">{{ b.source_project.name }}</a>
+            </p>
+          {% endif %}
+          {% if b.model_links %}
+            <p class="mt-2 text-xs text-slate-500 dark:text-slate-400">
+              <span class="font-medium">Models:</span>
+              {% for link in b.model_links %}
+                <a href="/models/{{ link.model.id }}" class="text-emerald-600 hover:text-emerald-500 dark:text-emerald-400">{{ link.model.name }}</a>{% if link.qty != 1 %} ×{{ link.qty }}{% endif %}{% if not loop.last %}, {% endif %}
+              {% endfor %}
+            </p>
+          {% endif %}
+          <div class="mt-3 flex gap-3 text-xs">
+            <a href="/printers/{{ printer.id }}/builds/{{ b.id }}/edit"
+               class="text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300">Edit</a>
+            <form method="post" action="/printers/{{ printer.id }}/builds/{{ b.id }}/delete"
+                  onsubmit="return confirm('Delete {{ b.name }} from build?');" class="inline">
+              <button class="text-rose-600 hover:text-rose-500 dark:text-rose-400 dark:hover:text-rose-300">Delete</button>
+            </form>
+          </div>
+        </div>
+      </article>
+    {% else %}
+      <div class="col-span-full rounded-lg border border-dashed border-slate-300 p-12 text-center text-slate-500 dark:border-slate-800">
+        Nothing added yet. Use the form above to start cataloguing the build.
+      </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
