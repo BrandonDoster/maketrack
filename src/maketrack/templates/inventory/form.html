@@ -26,6 +26,7 @@
     <label class="block sm:col-span-2">
       <span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Name</span>
       <input type="text" name="name" required value="{{ (item.name if item else '') or '' }}"
+             data-hardware-preset="unit"
              class="{{ input_classes }}">
     </label>
     <label class="block">

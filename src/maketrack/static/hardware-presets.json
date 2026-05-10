@@ -1,0 +1,129 @@
+{
+  "presets": [
+    {"name": "M2x6 SHCS",   "unit": "each", "category": "hardware"},
+    {"name": "M2x8 SHCS",   "unit": "each", "category": "hardware"},
+    {"name": "M2x10 SHCS",  "unit": "each", "category": "hardware"},
+    {"name": "M2x12 SHCS",  "unit": "each", "category": "hardware"},
+
+    {"name": "M2.5x6 SHCS",  "unit": "each", "category": "hardware"},
+    {"name": "M2.5x8 SHCS",  "unit": "each", "category": "hardware"},
+    {"name": "M2.5x10 SHCS", "unit": "each", "category": "hardware"},
+    {"name": "M2.5x12 SHCS", "unit": "each", "category": "hardware"},
+    {"name": "M2.5x16 SHCS", "unit": "each", "category": "hardware"},
+
+    {"name": "M3x6 SHCS",   "unit": "each", "category": "hardware"},
+    {"name": "M3x8 SHCS",   "unit": "each", "category": "hardware"},
+    {"name": "M3x10 SHCS",  "unit": "each", "category": "hardware"},
+    {"name": "M3x12 SHCS",  "unit": "each", "category": "hardware"},
+    {"name": "M3x14 SHCS",  "unit": "each", "category": "hardware"},
+    {"name": "M3x16 SHCS",  "unit": "each", "category": "hardware"},
+    {"name": "M3x20 SHCS",  "unit": "each", "category": "hardware"},
+    {"name": "M3x25 SHCS",  "unit": "each", "category": "hardware"},
+    {"name": "M3x30 SHCS",  "unit": "each", "category": "hardware"},
+    {"name": "M3x35 SHCS",  "unit": "each", "category": "hardware"},
+    {"name": "M3x40 SHCS",  "unit": "each", "category": "hardware"},
+    {"name": "M3x45 SHCS",  "unit": "each", "category": "hardware"},
+    {"name": "M3x50 SHCS",  "unit": "each", "category": "hardware"},
+
+    {"name": "M3x6 BHCS",   "unit": "each", "category": "hardware"},
+    {"name": "M3x8 BHCS",   "unit": "each", "category": "hardware"},
+    {"name": "M3x10 BHCS",  "unit": "each", "category": "hardware"},
+    {"name": "M3x12 BHCS",  "unit": "each", "category": "hardware"},
+    {"name": "M3x16 BHCS",  "unit": "each", "category": "hardware"},
+
+    {"name": "M3x8 FHCS",   "unit": "each", "category": "hardware"},
+    {"name": "M3x10 FHCS",  "unit": "each", "category": "hardware"},
+    {"name": "M3x12 FHCS",  "unit": "each", "category": "hardware"},
+
+    {"name": "M3 Set Screw 4mm", "unit": "each", "category": "hardware"},
+    {"name": "M3 Set Screw 6mm", "unit": "each", "category": "hardware"},
+
+    {"name": "M5x8 SHCS",   "unit": "each", "category": "hardware"},
+    {"name": "M5x10 SHCS",  "unit": "each", "category": "hardware"},
+    {"name": "M5x12 SHCS",  "unit": "each", "category": "hardware"},
+    {"name": "M5x16 SHCS",  "unit": "each", "category": "hardware"},
+    {"name": "M5x20 SHCS",  "unit": "each", "category": "hardware"},
+    {"name": "M5x25 SHCS",  "unit": "each", "category": "hardware"},
+
+    {"name": "M5x8 BHCS",   "unit": "each", "category": "hardware"},
+    {"name": "M5x10 BHCS",  "unit": "each", "category": "hardware"},
+    {"name": "M5x12 BHCS",  "unit": "each", "category": "hardware"},
+
+    {"name": "M3 Nut",      "unit": "each", "category": "hardware"},
+    {"name": "M3 Lock Nut", "unit": "each", "category": "hardware"},
+    {"name": "M3 Square Nut", "unit": "each", "category": "hardware"},
+    {"name": "M5 Nut",      "unit": "each", "category": "hardware"},
+    {"name": "M5 Lock Nut", "unit": "each", "category": "hardware"},
+
+    {"name": "M3 Heatset", "unit": "each", "category": "hardware"},
+    {"name": "M4 Heatset", "unit": "each", "category": "hardware"},
+    {"name": "M5 Heatset", "unit": "each", "category": "hardware"},
+
+    {"name": "M3 Washer",        "unit": "each", "category": "hardware"},
+    {"name": "M3 Fender Washer", "unit": "each", "category": "hardware"},
+    {"name": "M5 Washer",        "unit": "each", "category": "hardware"},
+
+    {"name": "M3 T-Nut (2020)", "unit": "each", "category": "hardware"},
+    {"name": "M5 T-Nut (2020)", "unit": "each", "category": "hardware"},
+    {"name": "M3 T-Nut (1515)", "unit": "each", "category": "hardware"},
+
+    {"name": "F623 Bearing",  "unit": "each", "category": "hardware"},
+    {"name": "F624 Bearing",  "unit": "each", "category": "hardware"},
+    {"name": "F625 Bearing",  "unit": "each", "category": "hardware"},
+    {"name": "F695 Bearing",  "unit": "each", "category": "hardware"},
+    {"name": "625 Bearing",   "unit": "each", "category": "hardware"},
+    {"name": "688 Bearing",   "unit": "each", "category": "hardware"},
+    {"name": "695 Bearing",   "unit": "each", "category": "hardware"},
+    {"name": "MR105 Bearing", "unit": "each", "category": "hardware"},
+
+    {"name": "GT2 Belt 6mm",        "unit": "m",    "category": "hardware"},
+    {"name": "GT2 Belt 9mm",        "unit": "m",    "category": "hardware"},
+    {"name": "GT2 Idler 20T",       "unit": "each", "category": "hardware"},
+    {"name": "GT2 Pulley 20T (5mm bore)",  "unit": "each", "category": "hardware"},
+
+    {"name": "Linear Rail MGN9 100mm", "unit": "each", "category": "hardware"},
+    {"name": "Linear Rail MGN9 150mm", "unit": "each", "category": "hardware"},
+    {"name": "Linear Rail MGN12 300mm", "unit": "each", "category": "hardware"},
+    {"name": "Linear Rail MGN12 400mm", "unit": "each", "category": "hardware"},
+
+    {"name": "Leadscrew T8x8 350mm",  "unit": "each", "category": "hardware"},
+    {"name": "Leadscrew T8x8 400mm",  "unit": "each", "category": "hardware"},
+    {"name": "Leadscrew Nut T8 brass", "unit": "each", "category": "hardware"},
+
+    {"name": "PTFE Tube 2x4mm", "unit": "m",    "category": "other"},
+    {"name": "PTFE Tube 4x6mm", "unit": "m",    "category": "other"},
+    {"name": "Bowden Coupler PC4-M10",  "unit": "each", "category": "hardware"},
+    {"name": "Bowden Coupler PC4-M6",   "unit": "each", "category": "hardware"},
+
+    {"name": "Hotend (V6 clone)",  "unit": "each", "category": "hardware"},
+    {"name": "Hotend (Rapido HF)", "unit": "each", "category": "hardware"},
+    {"name": "Nozzle 0.4mm Brass", "unit": "each", "category": "hardware"},
+    {"name": "Nozzle 0.6mm Brass", "unit": "each", "category": "hardware"},
+    {"name": "Nozzle 0.4mm Hardened", "unit": "each", "category": "hardware"},
+
+    {"name": "BMG Gears (CHT)", "unit": "each", "category": "hardware"},
+    {"name": "Stepper NEMA17 (40mm)", "unit": "each", "category": "electronic"},
+    {"name": "Stepper NEMA17 (48mm)", "unit": "each", "category": "electronic"},
+    {"name": "Stepper NEMA14 (36mm)", "unit": "each", "category": "electronic"},
+
+    {"name": "Thermistor (PT1000)",   "unit": "each", "category": "electronic"},
+    {"name": "Thermistor (104NT)",    "unit": "each", "category": "electronic"},
+    {"name": "Heater Cartridge 24V/40W", "unit": "each", "category": "electronic"},
+    {"name": "Heater Cartridge 24V/50W", "unit": "each", "category": "electronic"},
+
+    {"name": "Fan 4010 24V",  "unit": "each", "category": "electronic"},
+    {"name": "Fan 4020 24V",  "unit": "each", "category": "electronic"},
+    {"name": "Fan 5015 24V",  "unit": "each", "category": "electronic"},
+    {"name": "Fan 6020 24V",  "unit": "each", "category": "electronic"},
+
+    {"name": "XT60 Connector",       "unit": "each", "category": "electronic"},
+    {"name": "XT30 Connector",       "unit": "each", "category": "electronic"},
+    {"name": "Microfit 3.0 Connector", "unit": "each", "category": "electronic"},
+
+    {"name": "Silicone Wire 14AWG", "unit": "m", "category": "electronic"},
+    {"name": "Silicone Wire 16AWG", "unit": "m", "category": "electronic"},
+    {"name": "Silicone Wire 18AWG", "unit": "m", "category": "electronic"},
+    {"name": "Silicone Wire 22AWG", "unit": "m", "category": "electronic"},
+    {"name": "PTFE Wire 22AWG",     "unit": "m", "category": "electronic"}
+  ]
+}

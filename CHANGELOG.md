@@ -360,3 +360,28 @@ All notable changes to this project will be documented here. Format roughly foll
   page 1 shows "page 1 of 2", page 2 shows "page 2 of 2", page=99
   clamps to page 2, category filter survives prev-page navigation.
   195 tests pass.
+
+### M10 — hardware-preset autocomplete
+- Static `static/hardware-presets.json` with 103 starter entries
+  covering common 3D-printing parts: M2/M2.5/M3/M5 SHCS+BHCS+FHCS in
+  the lengths people actually buy, heatset inserts, nuts/washers,
+  T-nuts, bearings (F62x, MR105), GT2 belts/pulleys, MGN9/MGN12
+  rails, T8 leadscrews, PTFE tubing, hotends, nozzles, BMG gears,
+  NEMA17 steppers, thermistors, fans, XT60/XT30, silicone wire.
+  Easy to extend by editing the JSON.
+- `static/hardware-presets.js` self-wires every
+  `<input data-hardware-preset="<unit-field-name>">` on the page to a
+  shared generated `<datalist>` and prefills the linked unit field
+  when a recognized preset is picked — but never overwrites a unit
+  the user already typed manually. Self-skipping: if no inputs match,
+  the JSON fetch never fires.
+- Wired on the inventory create/edit form's `name` input (fills the
+  visible `unit` input) and the BOM custom-item entry row on the
+  project detail page (fills a hidden `unit` input that's part of the
+  same form, so the JS-set value survives form submission).
+- Loaded globally via base.html so any future input that opts in via
+  the data attribute gets the behavior automatically.
+- Verified end-to-end through Docker: 103 presets served from JSON,
+  inventory form + BOM entry row both carry the wiring attribute,
+  BOM row has the hidden unit input. Removed the autocomplete entry
+  from the CLAUDE.md "Planned" section. 202 tests pass.
