@@ -37,9 +37,11 @@ async def test_printer_detail_page_renders(client: AsyncClient) -> None:
     resp = await client.get(f"/printers/{pid}")
     assert resp.status_code == 200
     assert "Voron 0" in resp.text
-    # The Build section is the M12 addition; explicit text + form action.
     assert "Build" in resp.text
-    assert f'action="/printers/{pid}/builds"' in resp.text
+    # Three add paths land on the detail page.
+    assert ">Add model<" in resp.text
+    assert ">Add project<" in resp.text
+    assert ">Add custom<" in resp.text
 
 
 async def test_printer_photo_upload_and_remove(client: AsyncClient) -> None:
@@ -137,32 +139,83 @@ async def test_qty_must_be_positive(client: AsyncClient) -> None:
     assert resp.status_code == 422
 
 
-async def test_ui_create_build_then_link_model(client: AsyncClient) -> None:
+async def test_ui_add_model_path_seeds_name_and_link(client: AsyncClient) -> None:
+    """Picking a model from the inline form creates a build named after
+    the model AND auto-links the model — no name typing required."""
     pid = await _new_printer(client)
-    proj_id = await _new_project(client, "Skirts journal")
-    mid = await _new_model(client, "skirt panel")
+    mid = await _new_model(client, "Stealthburner duct")
 
-    # Add via UI form.
     create = await client.post(
         f"/printers/{pid}/builds",
-        data={"name": "Skirts", "source_project_id": str(proj_id)},
+        data={"model_id": str(mid)},
         follow_redirects=False,
     )
     assert create.status_code == 303
 
-    # The new build appears on the detail page with the project link.
+    builds = (await client.get(f"/api/printers/{pid}/builds")).json()
+    assert len(builds) == 1
+    assert builds[0]["name"] == "Stealthburner duct"
+    links = builds[0]["model_links"]
+    assert len(links) == 1
+    assert links[0]["model_id"] == mid
+    assert links[0]["qty"] == 1
+
+
+async def test_ui_add_project_path_uses_project_name(client: AsyncClient) -> None:
+    """Picking a project doesn't require typing a build name — the
+    project's own name is used."""
+    pid = await _new_printer(client)
+    proj_id = await _new_project(client, "Skirts journal")
+
+    create = await client.post(
+        f"/printers/{pid}/builds",
+        data={"source_project_id": str(proj_id)},
+        follow_redirects=False,
+    )
+    assert create.status_code == 303
+
+    builds = (await client.get(f"/api/printers/{pid}/builds")).json()
+    assert len(builds) == 1
+    assert builds[0]["name"] == "Skirts journal"
+    assert builds[0]["source_project"]["id"] == proj_id
+    assert builds[0]["model_links"] == []
+
     detail = await client.get(f"/printers/{pid}")
-    assert "Skirts" in detail.text
     assert f'href="/projects/{proj_id}"' in detail.text
 
-    # Find the build id by listing via API.
-    builds = await client.get(f"/api/printers/{pid}/builds")
-    build_id = builds.json()[0]["id"]
 
-    # Edit page renders, then UI POST adds a model link.
-    edit_page = await client.get(f"/printers/{pid}/builds/{build_id}/edit")
-    assert edit_page.status_code == 200
-    assert "skirt panel" in edit_page.text  # in the available-models <select>
+async def test_ui_add_custom_name_path(client: AsyncClient) -> None:
+    """Custom name path: just text, no model or project — for things
+    like 'Custom wiring' that don't link to either."""
+    pid = await _new_printer(client)
+
+    create = await client.post(
+        f"/printers/{pid}/builds",
+        data={"name": "Custom wiring"},
+        follow_redirects=False,
+    )
+    assert create.status_code == 303
+
+    builds = (await client.get(f"/api/printers/{pid}/builds")).json()
+    assert len(builds) == 1
+    assert builds[0]["name"] == "Custom wiring"
+    assert builds[0]["source_project"] is None
+    assert builds[0]["model_links"] == []
+
+
+async def test_ui_link_more_models_via_edit_page(client: AsyncClient) -> None:
+    """Once a build exists (created from any path), the edit page lets
+    you keep adding models with qty + notes."""
+    pid = await _new_printer(client)
+    mid = await _new_model(client, "skirt panel")
+
+    create = await client.post(
+        f"/printers/{pid}/builds",
+        data={"name": "Skirts"},
+        follow_redirects=False,
+    )
+    assert create.status_code == 303
+    build_id = (await client.get(f"/api/printers/{pid}/builds")).json()[0]["id"]
 
     link = await client.post(
         f"/printers/{pid}/builds/{build_id}/models",
@@ -171,11 +224,21 @@ async def test_ui_create_build_then_link_model(client: AsyncClient) -> None:
     )
     assert link.status_code == 303
 
-    # Detail page now shows the model with the qty.
     detail = await client.get(f"/printers/{pid}")
     assert "skirt panel" in detail.text
-    # Template renders qty as U+00D7 + digit (e.g. the build card text).
+    # Template renders qty as U+00D7 + digit.
     assert "×4" in detail.text
+
+
+async def test_ui_empty_form_is_a_noop(client: AsyncClient) -> None:
+    """Submitting all three forms blank does nothing rather than 422'ing."""
+    pid = await _new_printer(client)
+
+    resp = await client.post(f"/printers/{pid}/builds", data={}, follow_redirects=False)
+    assert resp.status_code == 303
+
+    builds = (await client.get(f"/api/printers/{pid}/builds")).json()
+    assert builds == []
 
 
 async def test_ui_build_photo_upload_and_remove(client: AsyncClient) -> None:

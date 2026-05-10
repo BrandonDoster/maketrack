@@ -20,8 +20,10 @@ from maketrack.schemas.printer import (
     PrinterBuildModelUpdate,
     PrinterBuildUpdate,
 )
+from maketrack.services import models as model_svc
 from maketrack.services import printer_builds as svc
 from maketrack.services import printers as printer_svc
+from maketrack.services import projects as project_svc
 from maketrack.services.uploads import UploadError, delete_upload, save_photo
 from maketrack.templating import templates
 
@@ -55,6 +57,7 @@ async def detail_page(printer_id: int, request: Request, session: SessionDep) ->
     available_projects = (
         (await session.execute(select(Project).order_by(Project.name))).scalars().all()
     )
+    available_models = (await session.execute(select(Model).order_by(Model.name))).scalars().all()
     return templates.TemplateResponse(
         request,
         "printers/detail.html",
@@ -62,6 +65,7 @@ async def detail_page(printer_id: int, request: Request, session: SessionDep) ->
             "printer": printer,
             "builds": builds,
             "available_projects": available_projects,
+            "available_models": available_models,
         },
     )
 
@@ -97,21 +101,52 @@ async def delete_photo(printer_id: int, session: SessionDep) -> HTMLResponse:
 
 @router.post("/printers/{printer_id}/builds", response_class=HTMLResponse)
 async def create_build(printer_id: int, request: Request, session: SessionDep) -> HTMLResponse:
+    """Create a build entry from one of three starting points: a model
+    (its name seeds the entry's name and the model is auto-linked), a
+    project (its name seeds the entry, source_project_id set), or a
+    freeform name for things that don't link to either yet."""
     await printer_svc.get_printer(session, printer_id)
     form = strip_empty_strings(dict(await request.form()))
+    _coerce_optional_int(form, "model_id")
     _coerce_optional_int(form, "source_project_id")
-    try:
-        payload = PrinterBuildCreate(**form)
-    except ValidationError:
-        # Inline form with only name+description+project — easiest fallback
-        # is just to redirect; the user will see their input cleared, which
-        # is rare since the only required field is name.
-        return RedirectResponse(
-            url=f"/printers/{printer_id}", status_code=status.HTTP_303_SEE_OTHER
+    redirect = RedirectResponse(
+        url=f"/printers/{printer_id}", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+    if form.get("model_id"):
+        model = await model_svc.get_model(session, form["model_id"])
+        build = await svc.create_build(
+            session,
+            printer_id=printer_id,
+            payload=PrinterBuildCreate(name=model.name),
         )
-    await svc.create_build(session, printer_id=printer_id, payload=payload)
-    await session.commit()
-    return RedirectResponse(url=f"/printers/{printer_id}", status_code=status.HTTP_303_SEE_OTHER)
+        await svc.add_model(
+            session,
+            build_id=build.id,
+            payload=PrinterBuildModelCreate(model_id=model.id, qty=1),
+        )
+        await session.commit()
+        return redirect
+
+    if form.get("source_project_id"):
+        project = await project_svc.get_project(session, form["source_project_id"])
+        await svc.create_build(
+            session,
+            printer_id=printer_id,
+            payload=PrinterBuildCreate(name=project.name, source_project_id=project.id),
+        )
+        await session.commit()
+        return redirect
+
+    if form.get("name"):
+        try:
+            payload = PrinterBuildCreate(name=form["name"])
+        except ValidationError:
+            return redirect
+        await svc.create_build(session, printer_id=printer_id, payload=payload)
+        await session.commit()
+
+    return redirect
 
 
 async def _render_build_edit(
