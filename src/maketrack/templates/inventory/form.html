@@ -62,9 +62,18 @@
     </label>
     <label class="block">
       <span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Location</span>
-      <input type="text" name="location" placeholder="Bin A3, Drawer 4…"
-             value="{{ (item.location if item else '') or '' }}"
-             class="{{ input_classes }}">
+      <select name="location_id" class="{{ input_classes }}">
+        {% set current_location_id = item.location_id if item else None %}
+        <option value="" {{ 'selected' if not current_location_id }}>—</option>
+        {% for loc in locations %}
+          <option value="{{ loc.id }}" {{ 'selected' if current_location_id == loc.id }}>
+            {{ loc.name }} ({{ loc.kind }})
+          </option>
+        {% endfor %}
+      </select>
+      <span class="text-xs text-slate-500">
+        <a href="/settings/locations" class="text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300">Manage locations →</a>
+      </span>
     </label>
     <label class="block">
       <span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Vendor</span>

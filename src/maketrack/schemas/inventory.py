@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from maketrack.schemas.location import LocationRead
+
 INVENTORY_CATEGORIES = ("hardware", "electronic", "tool", "other")
 
 
@@ -13,7 +15,7 @@ class InventoryItemBase(BaseModel):
     quantity: float = Field(default=0.0, ge=0)
     reorder_threshold: float | None = Field(default=None, ge=0)
     unit: str | None = Field(default=None, max_length=20)
-    location: str | None = Field(default=None, max_length=200)
+    location_id: int | None = None
     vendor: str | None = None
     vendor_sku: str | None = None
     vendor_url: str | None = None
@@ -31,7 +33,7 @@ class InventoryItemUpdate(BaseModel):
     quantity: float | None = Field(default=None, ge=0)
     reorder_threshold: float | None = Field(default=None, ge=0)
     unit: str | None = Field(default=None, max_length=20)
-    location: str | None = Field(default=None, max_length=200)
+    location_id: int | None = None
     vendor: str | None = None
     vendor_sku: str | None = None
     vendor_url: str | None = None
@@ -43,5 +45,6 @@ class InventoryItemRead(InventoryItemBase):
 
     id: int
     photo_path: str | None
+    location: LocationRead | None = None
     created_at: datetime
     updated_at: datetime

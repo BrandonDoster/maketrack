@@ -385,3 +385,38 @@ All notable changes to this project will be documented here. Format roughly foll
   inventory form + BOM entry row both carry the wiring attribute,
   BOM row has the hidden unit input. Removed the autocomplete entry
   from the CLAUDE.md "Planned" section. 202 tests pass.
+
+### M11 — locations
+- New `locations` table (`id, name UNIQUE, kind, parent_id, qr_code,
+  created_at, updated_at`). Kind enum stays storage-scale —
+  `bin | shelf | drawer | other` — no rooms or buildings. `parent_id`
+  and `qr_code` ship in the schema for future nesting and the planned
+  QR-scan flow but aren't exposed in the UI yet.
+- Migration 0005 promotes the old `inventory_items.location` text
+  field: creates the table, adds an `inventory_items.location_id` FK
+  with `ON DELETE SET NULL`, backfills one row per distinct existing
+  string (kind defaulted to `other` so backfilled values are visible
+  but distinguishable from intentional bin/shelf assignments), repoints
+  the items, then drops the old column. Round-trip downgrade restores
+  the text values.
+- `Location` ORM model + `InventoryItem.location` relationship
+  (`lazy="joined"` so list views and serializers don't need to
+  remember to eager-load).
+- API at `/api/locations` (CRUD with 409 on duplicate name) and a
+  Settings sub-page at `/settings/locations` for the UI: inline create
+  form, table with item-count column, edit page, delete with confirm.
+- Inventory form swaps the free-text location input for a select of
+  existing locations plus a "Manage locations →" link. Inventory list
+  renders `it.location.name`. MCP `inventory_item` serializer follows
+  suit, returning the location name as a string.
+- Settings index gets a Locations card alongside External sources and
+  Appearance; the "future milestones" placeholder shrinks to just QR
+  codes and printer mods.
+- Tests: locations CRUD, duplicate-name 409, invalid-kind 422, FK
+  set-null on delete, settings UI flow (create/edit/delete redirects),
+  inventory form renders the select and posts location_id, inventory
+  list renders the name, settings page links to /settings/locations.
+  Migration test seeds rows at revision 0004 with the old text field
+  and asserts both that distinct strings collapse into the right
+  number of locations rows and that NULLs stay NULL after the upgrade.
+  216 tests pass.

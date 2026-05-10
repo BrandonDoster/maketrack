@@ -25,14 +25,20 @@ async def test_quantity_rejects_negative(client: AsyncClient) -> None:
     assert resp.status_code == 422
 
 
-async def test_location_field_round_trips(client: AsyncClient) -> None:
+async def test_location_fk_round_trips(client: AsyncClient) -> None:
+    loc = await client.post("/api/locations", json={"name": "Bin A3", "kind": "bin"})
+    assert loc.status_code == 201, loc.text
+    location_id = loc.json()["id"]
+
     resp = await client.post(
         "/api/inventory",
-        json={"name": "M3 Heatsets", "location": "Bin A3", "quantity": 50},
+        json={"name": "M3 Heatsets", "location_id": location_id, "quantity": 50},
     )
-    assert resp.status_code == 201
+    assert resp.status_code == 201, resp.text
     body = resp.json()
-    assert body["location"] == "Bin A3"
+    assert body["location_id"] == location_id
+    assert body["location"]["name"] == "Bin A3"
+    assert body["location"]["kind"] == "bin"
 
 
 _PNG_1X1 = (

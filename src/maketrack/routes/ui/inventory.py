@@ -14,6 +14,7 @@ from maketrack.routes.ui._forms import (
 )
 from maketrack.schemas.inventory import InventoryItemCreate, InventoryItemUpdate
 from maketrack.services import inventory as svc
+from maketrack.services import locations as locations_svc
 from maketrack.services._pagination import DEFAULT_PAGE_SIZE, Page, normalize_page
 from maketrack.services.uploads import UploadError, delete_upload, save_photo
 from maketrack.templating import templates
@@ -68,9 +69,12 @@ async def list_page(
 
 
 @router.get("/inventory/new", response_class=HTMLResponse)
-async def new_form(request: Request) -> HTMLResponse:
+async def new_form(request: Request, session: SessionDep) -> HTMLResponse:
+    locations = await locations_svc.list_locations(session)
     return templates.TemplateResponse(
-        request, "inventory/form.html", {"item": None, "errors": None}
+        request,
+        "inventory/form.html",
+        {"item": None, "errors": None, "locations": locations},
     )
 
 
@@ -81,10 +85,15 @@ async def create(request: Request, session: SessionDep) -> HTMLResponse:
     try:
         payload = InventoryItemCreate(**payload_data)
     except ValidationError as exc:
+        locations = await locations_svc.list_locations(session)
         return templates.TemplateResponse(
             request,
             "inventory/form.html",
-            {"item": None, "errors": [format_validation_error(e) for e in exc.errors()]},
+            {
+                "item": None,
+                "errors": [format_validation_error(e) for e in exc.errors()],
+                "locations": locations,
+            },
             status_code=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -94,10 +103,11 @@ async def create(request: Request, session: SessionDep) -> HTMLResponse:
         try:
             photo_path, _, _ = await save_photo(photo_field, subdir="inventory")
         except UploadError as exc:
+            locations = await locations_svc.list_locations(session)
             return templates.TemplateResponse(
                 request,
                 "inventory/form.html",
-                {"item": None, "errors": [str(exc)]},
+                {"item": None, "errors": [str(exc)], "locations": locations},
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -111,8 +121,11 @@ async def create(request: Request, session: SessionDep) -> HTMLResponse:
 @router.get("/inventory/{item_id}/edit", response_class=HTMLResponse)
 async def edit_form(item_id: int, request: Request, session: SessionDep) -> HTMLResponse:
     item = await svc.get_item(session, item_id)
+    locations = await locations_svc.list_locations(session)
     return templates.TemplateResponse(
-        request, "inventory/form.html", {"item": item, "errors": None}
+        request,
+        "inventory/form.html",
+        {"item": item, "errors": None, "locations": locations},
     )
 
 
@@ -127,10 +140,15 @@ async def update(item_id: int, request: Request, session: SessionDep) -> HTMLRes
         payload = InventoryItemUpdate(**payload_data)
     except ValidationError as exc:
         item = await svc.get_item(session, item_id)
+        locations = await locations_svc.list_locations(session)
         return templates.TemplateResponse(
             request,
             "inventory/form.html",
-            {"item": item, "errors": [format_validation_error(e) for e in exc.errors()]},
+            {
+                "item": item,
+                "errors": [format_validation_error(e) for e in exc.errors()],
+                "locations": locations,
+            },
             status_code=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -141,10 +159,11 @@ async def update(item_id: int, request: Request, session: SessionDep) -> HTMLRes
         try:
             new_path, _, _ = await save_photo(photo_field, subdir="inventory")
         except UploadError as exc:
+            locations = await locations_svc.list_locations(session)
             return templates.TemplateResponse(
                 request,
                 "inventory/form.html",
-                {"item": item, "errors": [str(exc)]},
+                {"item": item, "errors": [str(exc)], "locations": locations},
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
         old_path = item.photo_path

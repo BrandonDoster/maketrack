@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from maketrack.db import get_session
 from maketrack.models.external_source import ExternalSource
+from maketrack.models.location import Location
 from maketrack.services.theme import (
     ALLOWED_THEMES,
     DEFAULT_THEME,
@@ -25,11 +26,15 @@ async def settings_page(request: Request, session: SessionDep) -> HTMLResponse:
     source_count = (
         await session.execute(select(func.count()).select_from(ExternalSource))
     ).scalar_one()
+    location_count = (
+        await session.execute(select(func.count()).select_from(Location))
+    ).scalar_one()
     return templates.TemplateResponse(
         request,
         "settings/index.html",
         {
             "source_count": source_count,
+            "location_count": location_count,
             "current_theme": get_theme(request),
             "themes": ALLOWED_THEMES,
         },

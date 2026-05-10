@@ -78,7 +78,7 @@
             {% endif %}
           </td>
           <td class="px-4 py-3 text-slate-500 dark:text-slate-400">{{ it.unit or '—' }}</td>
-          <td class="px-4 py-3 text-slate-500 dark:text-slate-400">{{ it.location or '—' }}</td>
+          <td class="px-4 py-3 text-slate-500 dark:text-slate-400">{{ it.location.name if it.location else '—' }}</td>
           <td class="px-4 py-3 text-slate-500 dark:text-slate-400">
             {% if it.vendor_url %}
               <a href="{{ it.vendor_url }}" target="_blank" rel="noopener" class="hover:text-emerald-600 dark:hover:text-emerald-300">{{ it.vendor or it.vendor_sku or 'link' }} ↗</a>

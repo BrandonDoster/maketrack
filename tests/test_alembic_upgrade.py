@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect, text
 
 from maketrack.config import reset_settings_cache
 
@@ -26,6 +26,7 @@ EXPECTED_TABLES = {
     "external_sources",
     "filaments",
     "inventory_items",
+    "locations",
     "printers",
     "models",
     "model_assets",
@@ -56,5 +57,66 @@ def test_alembic_round_trip_creates_then_drops_all_tables(alembic_config: Config
         remaining = set(inspect(sync_engine).get_table_names())
         # Only alembic_version survives a full downgrade.
         assert remaining <= {"alembic_version"}
+    finally:
+        sync_engine.dispose()
+
+
+def test_locations_migration_backfills_existing_text_locations(
+    alembic_config: Config,
+) -> None:
+    """Bring the schema up to 0004 (still has the text `location` field),
+    seed a couple of items, then run 0005 and confirm each item ends up
+    pointed at a row in the new locations table with the same name."""
+    db_path = alembic_config.attributes["maketrack_db_path"]
+
+    command.upgrade(alembic_config, "0004")
+
+    sync_engine = create_engine(f"sqlite:///{db_path}")
+    try:
+        with sync_engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO inventory_items "
+                    "(name, quantity, location, created_at, updated_at) VALUES "
+                    "('M3 SHCS', 100, 'Bin A3', '2026-05-10', '2026-05-10'),"
+                    "('M3 Heatset', 50, 'Bin A3', '2026-05-10', '2026-05-10'),"
+                    "('PTFE Tube', 5, 'Drawer 4', '2026-05-10', '2026-05-10'),"
+                    "('Spare', 1, NULL, '2026-05-10', '2026-05-10')"
+                )
+            )
+    finally:
+        sync_engine.dispose()
+
+    command.upgrade(alembic_config, "0005")
+
+    sync_engine = create_engine(f"sqlite:///{db_path}")
+    try:
+        with sync_engine.connect() as conn:
+            # Two distinct strings → two location rows.
+            location_names = {
+                row[0] for row in conn.execute(text("SELECT name FROM locations")).all()
+            }
+            assert location_names == {"Bin A3", "Drawer 4"}
+
+            # Items previously sharing a string now share an FK; the null
+            # row stays null.
+            rows = conn.execute(
+                text(
+                    "SELECT i.name, l.name FROM inventory_items i "
+                    "LEFT JOIN locations l ON l.id = i.location_id "
+                    "ORDER BY i.id"
+                )
+            ).all()
+            assert rows == [
+                ("M3 SHCS", "Bin A3"),
+                ("M3 Heatset", "Bin A3"),
+                ("PTFE Tube", "Drawer 4"),
+                ("Spare", None),
+            ]
+
+            # Old text column is gone.
+            cols = {c["name"] for c in inspect(sync_engine).get_columns("inventory_items")}
+            assert "location" not in cols
+            assert "location_id" in cols
     finally:
         sync_engine.dispose()

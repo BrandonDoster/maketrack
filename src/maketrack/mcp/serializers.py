@@ -105,7 +105,7 @@ def inventory_item_to_dict(i: InventoryItem) -> dict:
         "category": i.category,
         "quantity": i.quantity,
         "unit": i.unit,
-        "location": i.location,
+        "location": i.location.name if i.location else None,
         "reorder_threshold": i.reorder_threshold,
     }
 

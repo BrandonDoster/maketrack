@@ -37,10 +37,9 @@ These are deferred but the data model should accommodate them so we don't end up
 
 - **Printer photo + mod list with project link.** A printer has zero or more mods. A mod has a name, optional notes, an optional photo, and an optional FK to a `projects.id` (the project that built/added the mod — useful when you printed your own riser feet). Schema sketch: `printer_mods (id, printer_id NOT NULL FK, name NOT NULL, description, photo_path, source_project_id FK projects, created_at, updated_at)`. Add `printers.photo_path TEXT NULL` for a primary printer photo.
 - **Inventory ↔ printer parts tracking.** A printer is partly an assembly of inventory items (heatset inserts, bolts, board, hotend, etc.). Track which items are currently installed in which printer so a teardown can reclaim them. Schema sketch: `printer_parts (id, printer_id FK CASCADE, inventory_item_id FK RESTRICT, qty NOT NULL DEFAULT 1, installed_at, removed_at NULL, notes)`. "Reclaim" UI bumps `removed_at`, increments `inventory_items.quantity` by `qty`.
-- **Locations for inventory.** Promote the `inventory_items.location` text field to a structured `locations` table (`id, name, kind ('bin'|'shelf'|'drawer'|'other'), parent_id NULL, qr_code NULL`) with `inventory_items.location_id FK NULL`. Settings page lists/edits locations.
-- **QR codes for items and bins.** When the location/item rows have stable URLs, render a QR code that decodes to the item or location detail page. Mobile flow: scan a bin QR, see what's in it; scan an item then a bin to move it; scan a bin while putting away an order to add new items there.
+- **QR codes for items and bins.** When the location/item rows have stable URLs, render a QR code that decodes to the item or location detail page. Mobile flow: scan a bin QR, see what's in it; scan an item then a bin to move it; scan a bin while putting away an order to add new items there. Schema piece is in place — `locations.qr_code` is reserved for the encoded value, just unused for now.
+- **Location nesting in the UI.** The `locations.parent_id` self-FK exists in the schema but the management UI doesn't expose it. Add when nested storage (shelf → bins on the shelf) becomes worth the form complexity — likely paired with a "path" display in the inventory list and select.
 - **Slicer-aware filament estimator.** Today `project_filaments.est_weight_g` is hand-entered. Goal: (a) per-project preset (`standard`, `voron`, `prusa_strong`, etc.) that applies an `infill × walls` multiplier to the model's bounding-box volume + filament density to ballpark grams; (b) parse the slice metadata embedded in a 3MF (Bambu/Orca write `Metadata/slice_info.config` with `filament_used` per spool) and use that as the source of truth when present; (c) per-`project_filament` row override so the user can correct after weighing the spool. Schema sketch: `slicer_presets (id, name, infill_multiplier, wall_multiplier, density_g_cm3)`; new column `project_filaments.estimate_source TEXT` (`manual` | `preset:<name>` | `3mf` | `override`).
-- **Pagination on the list pages.** M8 added search + filters but skipped pagination — at realistic homelab scales (<200 rows per list) it's noise. Add it when the filaments table crosses a few hundred spools or the models grid is clearly slow. Likely shape: `?page=N` query param with a fixed page size (50?), `prev` / `next` chips alongside the existing search toolbar, server-side `LIMIT/OFFSET`. Skip on projects + printers (low cardinality).
 
 ## Licensing and prior art
 
@@ -207,15 +206,40 @@ inventory_items (
   name                TEXT NOT NULL,
   category            TEXT,                     -- 'hardware' | 'electronic' | 'tool' | 'other'
   description         TEXT,
-  quantity            INTEGER NOT NULL DEFAULT 0,
-  reorder_threshold   INTEGER,
+  quantity            REAL NOT NULL DEFAULT 0,  -- decimal so '1.5m of wire' works
+  reorder_threshold   REAL,
   unit                TEXT,                     -- 'each' | 'm' | 'mm' | 'kg' | etc
+  location_id         INTEGER,                  -- FK to locations.id, nullable
+  photo_path          TEXT,
   vendor              TEXT,
   vendor_sku          TEXT,
   vendor_url          TEXT,
   notes               TEXT,
   created_at          TIMESTAMP,
-  updated_at          TIMESTAMP
+  updated_at          TIMESTAMP,
+
+  FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE SET NULL
+)
+```
+
+### locations
+
+Where inventory physically lives — bins, shelves, drawers. Keep the kind enum
+small and storage-scale (no buildings or rooms); nest with `parent_id` if you
+want "shelf → bins on the shelf." `qr_code` reserves the column for a future
+QR-scan flow but is unused today.
+
+```sql
+locations (
+  id          INTEGER PRIMARY KEY,
+  name        TEXT NOT NULL UNIQUE,
+  kind        TEXT NOT NULL DEFAULT 'bin',  -- 'bin' | 'shelf' | 'drawer' | 'other'
+  parent_id   INTEGER,                       -- FK to locations.id, nullable
+  qr_code     TEXT,                          -- reserved for future QR feature
+  created_at  TIMESTAMP,
+  updated_at  TIMESTAMP,
+
+  FOREIGN KEY (parent_id) REFERENCES locations(id) ON DELETE SET NULL
 )
 ```
 
