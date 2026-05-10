@@ -32,16 +32,35 @@ async def _new_project(client: AsyncClient, name: str) -> int:
     return resp.json()["id"]
 
 
-async def test_printer_detail_page_renders(client: AsyncClient) -> None:
+async def test_detail_read_mode_hides_edit_affordances(client: AsyncClient) -> None:
+    """Default page is reading-style: no add forms, no upload form."""
     pid = await _new_printer(client)
     resp = await client.get(f"/printers/{pid}")
     assert resp.status_code == 200
     assert "Voron 0" in resp.text
     assert "Build" in resp.text
-    # Three add paths land on the detail page.
+    # Edit toggle is the entry point.
+    assert "?edit=true" in resp.text
+    # Add forms are NOT rendered in read mode.
+    assert ">Add model<" not in resp.text
+    assert ">Add project<" not in resp.text
+    assert ">Add custom<" not in resp.text
+    # Upload form for an absent photo is NOT rendered in read mode.
+    assert "No photo yet" not in resp.text
+
+
+async def test_detail_edit_mode_reveals_forms(client: AsyncClient) -> None:
+    pid = await _new_printer(client)
+    resp = await client.get(f"/printers/{pid}?edit=true")
+    assert resp.status_code == 200
+    # All three add paths show in edit mode.
     assert ">Add model<" in resp.text
     assert ">Add project<" in resp.text
     assert ">Add custom<" in resp.text
+    # Done-editing exit link points back to the read-mode URL.
+    assert f'href="/printers/{pid}"' in resp.text
+    # Upload form for an absent photo IS rendered in edit mode.
+    assert "No photo yet" in resp.text
 
 
 async def test_printer_photo_upload_and_remove(client: AsyncClient) -> None:
@@ -201,6 +220,70 @@ async def test_ui_add_custom_name_path(client: AsyncClient) -> None:
     assert builds[0]["name"] == "Custom wiring"
     assert builds[0]["source_project"] is None
     assert builds[0]["model_links"] == []
+
+
+async def test_card_for_model_entry_links_to_model(client: AsyncClient) -> None:
+    """A build entry created from a model becomes a clickable card whose
+    primary target is that model — even in read mode."""
+    pid = await _new_printer(client)
+    mid = await _new_model(client, "duct")
+    await client.post(
+        f"/printers/{pid}/builds",
+        data={"model_id": str(mid)},
+        follow_redirects=False,
+    )
+
+    detail = await client.get(f"/printers/{pid}")
+    # Stretched-link wrapper carries the navigation target.
+    assert f'href="/models/{mid}"' in detail.text
+
+
+async def test_card_for_project_entry_links_to_project(client: AsyncClient) -> None:
+    pid = await _new_printer(client)
+    proj_id = await _new_project(client, "Skirts journal")
+    await client.post(
+        f"/printers/{pid}/builds",
+        data={"source_project_id": str(proj_id)},
+        follow_redirects=False,
+    )
+
+    detail = await client.get(f"/printers/{pid}")
+    assert f'href="/projects/{proj_id}"' in detail.text
+
+
+async def test_card_for_custom_entry_has_no_link(client: AsyncClient) -> None:
+    """A custom-name entry with no model and no project doesn't link
+    anywhere — it's read-only text on the detail page."""
+    pid = await _new_printer(client)
+    await client.post(
+        f"/printers/{pid}/builds",
+        data={"name": "Custom wiring"},
+        follow_redirects=False,
+    )
+
+    detail = await client.get(f"/printers/{pid}")
+    assert "Custom wiring" in detail.text
+    # No /models/N or /projects/N link in the card area; the only links
+    # outside the card region are the printer nav, edit-details, edit-page.
+    assert "/models/" not in detail.text
+    assert "/projects/" not in detail.text
+
+
+async def test_edit_buttons_only_render_in_edit_mode(client: AsyncClient) -> None:
+    pid = await _new_printer(client)
+    await client.post(
+        f"/printers/{pid}/builds",
+        data={"name": "Custom wiring"},
+        follow_redirects=False,
+    )
+
+    read = await client.get(f"/printers/{pid}")
+    assert "/builds/1/edit" not in read.text
+    assert "/builds/1/delete" not in read.text
+
+    edit = await client.get(f"/printers/{pid}?edit=true")
+    assert "/builds/1/edit" in edit.text
+    assert "/builds/1/delete" in edit.text
 
 
 async def test_ui_link_more_models_via_edit_page(client: AsyncClient) -> None:

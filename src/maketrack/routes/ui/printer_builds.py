@@ -51,13 +51,25 @@ def _coerce_optional_int(form: dict, key: str) -> None:
 
 
 @router.get("/printers/{printer_id}", response_class=HTMLResponse)
-async def detail_page(printer_id: int, request: Request, session: SessionDep) -> HTMLResponse:
+async def detail_page(
+    printer_id: int,
+    request: Request,
+    session: SessionDep,
+    edit: bool = False,
+) -> HTMLResponse:
     printer = await printer_svc.get_printer(session, printer_id)
     builds = await svc.list_for_printer(session, printer_id)
-    available_projects = (
-        (await session.execute(select(Project).order_by(Project.name))).scalars().all()
-    )
-    available_models = (await session.execute(select(Model).order_by(Model.name))).scalars().all()
+    # Only fetch the available models / projects when the page actually
+    # needs them (edit mode renders the picker selects).
+    available_projects: list = []
+    available_models: list = []
+    if edit:
+        available_projects = list(
+            (await session.execute(select(Project).order_by(Project.name))).scalars().all()
+        )
+        available_models = list(
+            (await session.execute(select(Model).order_by(Model.name))).scalars().all()
+        )
     return templates.TemplateResponse(
         request,
         "printers/detail.html",
@@ -66,6 +78,7 @@ async def detail_page(printer_id: int, request: Request, session: SessionDep) ->
             "builds": builds,
             "available_projects": available_projects,
             "available_models": available_models,
+            "edit_mode": edit,
         },
     )
 
