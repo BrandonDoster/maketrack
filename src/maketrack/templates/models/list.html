@@ -144,7 +144,12 @@
       <tbody class="divide-y divide-slate-200 bg-white dark:divide-slate-800 dark:bg-slate-950">
         {% for it in items %}
           {% set m = it.model %}
-          <tr class="hover:bg-slate-50 dark:hover:bg-slate-900/50">
+          {# Whole row navigates to the model — matches cards / list view
+             where clicking anywhere on the entry opens it. The name
+             <a> stays so keyboard nav and right-click still work; the
+             onclick on the <tr> covers the rest of the cells. #}
+          <tr class="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/50"
+              onclick="window.location='/models/{{ m.id }}'">
             <td class="px-3 py-2">
               <div class="h-10 w-10 overflow-hidden rounded bg-slate-100 dark:bg-slate-900">
                 {% if it.thumbnail_path %}

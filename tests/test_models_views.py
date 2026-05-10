@@ -31,6 +31,17 @@ async def test_models_details_view_renders_table(client: AsyncClient) -> None:
     assert '<th class="px-3 py-2">Updated</th>' in resp.text
 
 
+async def test_details_view_rows_are_clickable(client: AsyncClient) -> None:
+    """Each <tr> in the details view navigates to the model on click —
+    matches the behavior of the cards and list views where the whole
+    entry is clickable, not just the name."""
+    await _make_models(client)
+    resp = await client.get("/models?view=details")
+    # The onclick handler wires the whole row to the model URL.
+    assert "onclick=\"window.location='/models/" in resp.text
+    assert "cursor-pointer" in resp.text
+
+
 async def test_models_list_view_renders_compact_rows(client: AsyncClient) -> None:
     await _make_models(client)
     resp = await client.get("/models?view=list")
