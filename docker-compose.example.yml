@@ -1,6 +1,6 @@
 services:
   maketrack:
-    image: ghcr.io/bdoster/maketrack:latest
+    image: ghcr.io/brandondoster/maketrack:latest
     restart: unless-stopped
     ports:
       - "8000:8000"
