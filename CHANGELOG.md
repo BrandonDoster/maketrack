@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented here. Format roughly follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.1] - 2026-05-12
+
+### Fixed
+- Container startup failed with `sqlite3.OperationalError: unable to open
+  database file` on hosts where the bind-mounted `/data` directory wasn't
+  writable by the in-container user. The image used `useradd -r`, which
+  picks an unpredictable system UID, so there was no reliable way for users
+  to chown their host dirs.
+
+### Changed
+- Pin the `maketrack` user to **UID/GID 1000:1000** in the Dockerfile so
+  bind-mount ownership is deterministic and matches the default first-user
+  UID on most desktop Linux distros.
+- README and `docker-compose.example.yml` now document the
+  `chown -R 1000:1000` step (and a `user: "${UID}:${GID}"` override
+  escape hatch) for users whose host UID differs.
+
 ## [0.1.0] - 2026-05-10
 
 ### Added

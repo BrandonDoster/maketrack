@@ -55,6 +55,28 @@ Tools available:
 
 See `docker-compose.example.yml`. Mount `/data` and `/uploads` as volumes.
 
+The container runs as **UID/GID `1000:1000`** (matches the default first-user
+UID on most desktop Linux distros). When you bind-mount host directories for
+`/data` and `/uploads`, they need to be writable by that UID:
+
+```bash
+mkdir -p maketrack-data maketrack-uploads
+sudo chown -R 1000:1000 maketrack-data maketrack-uploads
+```
+
+If your host user is already UID 1000, the chown is a no-op. If not, either
+run the chown above or override the container user in compose to match your
+host UID:
+
+```yaml
+services:
+  maketrack:
+    user: "${UID}:${GID}"
+```
+
+Symptom if you skip this: startup fails with
+`sqlite3.OperationalError: unable to open database file`.
+
 ## License
 
 AGPL-3.0-or-later. See [`LICENSE`](./LICENSE).

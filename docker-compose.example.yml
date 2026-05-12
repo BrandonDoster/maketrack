@@ -4,6 +4,15 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
+    # The container runs as UID 1000:1000. Before `docker compose up`, make
+    # sure the host dirs are writable by that UID:
+    #
+    #   mkdir -p maketrack-data maketrack-uploads
+    #   sudo chown -R 1000:1000 maketrack-data maketrack-uploads
+    #
+    # If your host user is already UID 1000 (the default on most desktop
+    # Linux distros), the chown is a no-op. If not, either run the chown or
+    # add `user: "${UID}:${GID}"` below to override.
     volumes:
       - ./maketrack-data:/data
       - ./maketrack-uploads:/uploads

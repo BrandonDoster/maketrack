@@ -56,7 +56,11 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends curl && \
     rm -rf /var/lib/apt/lists/*
 
-RUN groupadd -r maketrack && useradd -r -g maketrack -d /app -s /usr/sbin/nologin maketrack
+# Pin UID/GID to 1000:1000 so bind-mounted host dirs are chown-able to a known
+# value. Matches the default first-user UID on most desktop Linux distros, so
+# `chown -R 1000:1000 ./maketrack-data` (often a no-op) is all a user needs.
+RUN groupadd -g 1000 maketrack && \
+    useradd -u 1000 -g 1000 -d /app -s /usr/sbin/nologin maketrack
 
 WORKDIR /app
 
