@@ -37,3 +37,19 @@ jobs:
 
       - name: pytest
         run: uv run pytest
+
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Trivy filesystem scan
+        # Reports HIGH+CRITICAL findings in deps + Dockerfile to the job log.
+        # Non-blocking on PRs; the release workflow gates pushes on CRITICAL.
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "0"

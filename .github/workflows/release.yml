@@ -11,6 +11,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      security-events: write
     steps:
       - uses: actions/checkout@v5
 
@@ -38,6 +39,44 @@ jobs:
             type=semver,pattern={{major}}.{{minor}},enable=${{ !contains(github.ref_name, '-') }}
             type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
 
+      - name: Build amd64 image for scanning
+        # Single-arch local build so Trivy can scan before we publish.
+        # The multi-arch push step below reuses buildx cache.
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: maketrack:scan
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy scan (report HIGH+CRITICAL to Security tab)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: maketrack:scan
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "0"
+
+      - name: Upload Trivy SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-image
+
+      - name: Trivy gate (fail on CRITICAL)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: maketrack:scan
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          skip-db-update: true
+
       - name: Build and push
         uses: docker/build-push-action@v7
         with:
@@ -46,3 +85,5 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
