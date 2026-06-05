@@ -1,0 +1,91 @@
+name: dev-image
+
+# Builds and publishes a throwaway test image from the `dev` branch so you
+# can pull/run it on real hardware without disturbing the production
+# `:latest` / `vX.Y.Z` tags that release.yml publishes.
+#
+# Tags pushed to ghcr.io/<owner>/maketrack:
+#   :dev             — moving "latest dev" pointer (overwritten each build)
+#   :dev-<short-sha> — immutable, so you can pin an exact test build
+#
+# Unlike release.yml this does NOT hard-gate on CRITICAL CVEs — a base-image
+# vuln shouldn't block a test image. The scan still runs and reports to the
+# Security tab for visibility.
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute tags
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/maketrack
+          tags: |
+            type=raw,value=dev
+            type=sha,prefix=dev-,format=short
+
+      - name: Build amd64 image for scanning
+        # Single-arch local build so Trivy can scan before we publish.
+        # The multi-arch push step below reuses the buildx cache.
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: maketrack:scan
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy scan (report HIGH+CRITICAL to Security tab, non-blocking)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: maketrack:scan
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "0"
+
+      - name: Upload Trivy SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-image-dev
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

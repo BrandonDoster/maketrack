@@ -81,7 +81,9 @@ async def list_project_models(session: AsyncSession, project_id: int) -> list[Hy
         if model.thumbnail_filename:
             # Thumbnail path is folder/photos/filename.
             thumb_path = f"{model.folder_name}/photos/{model.thumbnail_filename}"
-        out.append(HydratedProjectModel(link=link, asset=asset, model=model, thumbnail_path=thumb_path))
+        out.append(
+            HydratedProjectModel(link=link, asset=asset, model=model, thumbnail_path=thumb_path)
+        )
     return out
 
 
@@ -290,28 +292,26 @@ async def list_unlinked_assets(
     linked to the project.
     """
     # Get all asset IDs linked to this project.
-    linked_sub = select(ProjectModel.model_asset_id).where(
-        ProjectModel.project_id == project_id
-    )
-    linked_asset_ids = set(
-        (await session.execute(linked_sub)).scalars().all()
-    )
+    linked_sub = select(ProjectModel.model_asset_id).where(ProjectModel.project_id == project_id)
+    linked_asset_ids = set((await session.execute(linked_sub)).scalars().all())
 
     # Get all models ordered by name.
-    models = (
-        await session.execute(select(Model).order_by(Model.name))
-    ).scalars().all()
+    models = (await session.execute(select(Model).order_by(Model.name))).scalars().all()
 
     # For each model, get its assets and filter out linked ones.
     result: list[tuple[Model, list[ModelAsset]]] = []
     for model in models:
         assets = (
-            await session.execute(
-                select(ModelAsset)
-                .where(ModelAsset.model_id == model.id)
-                .order_by(ModelAsset.asset_type, ModelAsset.filename)
+            (
+                await session.execute(
+                    select(ModelAsset)
+                    .where(ModelAsset.model_id == model.id)
+                    .order_by(ModelAsset.asset_type, ModelAsset.filename)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         unlinked = [a for a in assets if a.id not in linked_asset_ids]
         if unlinked:

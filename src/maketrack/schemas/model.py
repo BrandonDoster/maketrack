@@ -57,11 +57,12 @@ class ModelRead(BaseModel):
 
     id: int
     name: str
+    folder_name: str
     description: str | None
     source_type: str | None
     source_url: str | None
     notes: str | None
     tags: list[str]
-    thumbnail_asset_id: int | None
+    thumbnail_filename: str | None
     created_at: datetime
     updated_at: datetime

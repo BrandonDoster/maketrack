@@ -1,5 +1,6 @@
 from typing import Annotated
 
+import mistune
 from fastapi import APIRouter, Depends, File, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import ValidationError
@@ -15,7 +16,7 @@ from maketrack.schemas.model import ModelCreate, ModelUpdate
 from maketrack.services import assets as asset_svc
 from maketrack.services import models as svc
 from maketrack.services._pagination import DEFAULT_PAGE_SIZE
-from maketrack.services.uploads import UploadError, delete_upload
+from maketrack.services.uploads import UploadError, delete_model_file, delete_model_folder
 from maketrack.templating import templates
 
 router = APIRouter(tags=["ui-models"])
@@ -30,6 +31,18 @@ def _parse_tags(raw: str | None) -> list[str]:
     if not raw:
         return []
     return [t.strip() for t in raw.split(",") if t.strip()]
+
+
+# escape=True renders raw HTML in the README body as text rather than
+# injecting it — the README is user-owned but we still don't trust it as
+# markup in the page.
+_markdown = mistune.create_markdown(escape=True)
+
+
+def render_markdown(text: str | None) -> str | None:
+    if not text:
+        return None
+    return _markdown(text)
 
 
 _VALID_MODEL_VIEWS = ("cards", "details", "list")
@@ -141,13 +154,11 @@ async def _render_detail(
     model = await svc.get_model(session, model_id)
     assets = await svc.list_assets(session, model_id)
     thumb_path = None
-    if model.thumbnail_asset_id:
-        for a in assets:
-            if a.id == model.thumbnail_asset_id:
-                thumb_path = a.file_path
-                break
+    if model.thumbnail_filename:
+        thumb_path = f"{model.folder_name}/photos/{model.thumbnail_filename}"
     stl_assets = [a for a in assets if a.asset_type == "stl"]
     tags = tags_override if tags_override is not None else svc.decode_tags(model.tags)
+    description = svc.read_description(model)
     return templates.TemplateResponse(
         request,
         "models/detail.html",
@@ -155,6 +166,8 @@ async def _render_detail(
             "model": model,
             "tags": tags,
             "tags_str": ", ".join(tags),
+            "description": description,
+            "description_html": render_markdown(description),
             "assets": assets,
             "thumbnail_path": thumb_path,
             "stl_assets": stl_assets,
@@ -212,9 +225,9 @@ async def update(model_id: int, request: Request, session: SessionDep) -> HTMLRe
 
 @router.post("/models/{model_id}/delete", response_class=HTMLResponse)
 async def delete(model_id: int, session: SessionDep) -> HTMLResponse:
-    paths = await svc.delete_model(session, model_id)
+    folder_name = await svc.delete_model(session, model_id)
     await session.commit()
-    asset_svc.cleanup_files(paths)
+    delete_model_folder(folder_name)
     return RedirectResponse(url="/models", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -271,7 +284,7 @@ async def delete_asset(asset_id: int, session: SessionDep) -> HTMLResponse:
     model_id = asset.model_id
     file_path = await asset_svc.delete_asset(session, asset_id)
     await session.commit()
-    delete_upload(file_path)
+    delete_model_file(file_path)
     return RedirectResponse(
         url=f"/models/{model_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
     )

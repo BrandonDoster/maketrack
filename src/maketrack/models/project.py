@@ -32,8 +32,12 @@ class ProjectModel(Base, TimestampMixin):
         ForeignKey("projects.id", ondelete="CASCADE"),
         primary_key=True,
     )
+    # CASCADE (not RESTRICT): the filesystem is the source of truth for
+    # models. Deleting a model folder on disk drops the Model + its
+    # ModelAssets, and these project links go with them. The model scan
+    # relies on this to reconcile orphaned folders without aborting.
     model_asset_id: Mapped[int] = mapped_column(
-        ForeignKey("model_assets.id", ondelete="RESTRICT"),
+        ForeignKey("model_assets.id", ondelete="CASCADE"),
         primary_key=True,
     )
     qty_to_print: Mapped[int] = mapped_column(default=1)

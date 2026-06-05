@@ -15,8 +15,11 @@ def _tmp_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     db_path = tmp_path / "test.db"
     uploads = tmp_path / "uploads"
     uploads.mkdir()
+    models = tmp_path / "models"
+    models.mkdir()
     monkeypatch.setenv("MAKETRACK_DB_PATH", str(db_path))
     monkeypatch.setenv("MAKETRACK_UPLOADS_PATH", str(uploads))
+    monkeypatch.setenv("MAKETRACK_MODELS_PATH", str(models))
     reset_settings_cache()
     return db_path
 

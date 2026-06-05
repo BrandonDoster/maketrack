@@ -48,7 +48,8 @@
         </label>
         <label class="block">
           <span class="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Description</span>
-          <textarea name="description" rows="3" class="{{ ic }} mt-1 w-full">{{ model.description or '' }}</textarea>
+          <textarea name="description" rows="3" class="{{ ic }} mt-1 w-full">{{ description or '' }}</textarea>
+          <span class="mt-1 block text-xs text-slate-400">Markdown — saved to the model's README.md on disk.</span>
         </label>
         <label class="block">
           <span class="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Notes</span>
@@ -76,8 +77,8 @@
           {% endfor %}
         </div>
       {% endif %}
-      {% if model.description %}
-        <p class="mt-4 whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300">{{ model.description }}</p>
+      {% if description_html %}
+        <div class="prose prose-sm mt-4 max-w-none text-slate-700 dark:prose-invert dark:text-slate-300">{{ description_html | safe }}</div>
       {% endif %}
       {% if model.notes %}
         <div class="mt-4">
@@ -102,7 +103,7 @@
     <div class="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
       {% if first_stl %}
         <div id="stl-viewer"
-             data-stl-url="/media/{{ first_stl.file_path }}"
+             data-stl-url="/model-media/{{ first_stl.file_path }}"
              class="aspect-square w-full rounded bg-slate-100 dark:bg-slate-950"></div>
         <p class="mt-2 text-xs text-slate-500">
           Showing <span class="font-mono">{{ first_stl.filename }}</span>{% if stl_assets|length > 1 %} ({{ stl_assets|length - 1 }} more STL not shown){% endif %} · drag to orbit, scroll to zoom.
@@ -120,7 +121,7 @@
         </script>
         <script type="module" src="/static/stl-viewer.js"></script>
       {% elif thumbnail_path %}
-        <img src="/media/{{ thumbnail_path }}" alt="thumbnail"
+        <img src="/model-media/{{ thumbnail_path }}" alt="thumbnail"
              class="aspect-square w-full rounded bg-slate-100 object-contain dark:bg-slate-950">
         <p class="mt-2 text-xs text-slate-500">No STL uploaded yet — showing the embedded thumbnail.</p>
       {% else %}
@@ -165,7 +166,7 @@
         <li class="flex items-center justify-between py-3">
           <div class="flex items-center gap-3 min-w-0">
             <span class="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs uppercase text-slate-700 dark:bg-slate-800 dark:text-slate-300">{{ a.asset_type }}</span>
-            {% if a.id == model.thumbnail_asset_id %}
+            {% if a.asset_type == 'image' and a.filename == model.thumbnail_filename %}
               <span class="rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800 dark:bg-emerald-900/40 dark:text-crimson">thumbnail</span>
             {% endif %}
             {% if a.generated %}
@@ -179,7 +180,7 @@
           <div class="flex items-center gap-2">
             <a href="/assets/{{ a.id }}/download" class="text-xs text-slate-600 hover:text-crimson dark:text-slate-400 dark:hover:text-crimson">Download</a>
             {% if edit_mode %}
-              {% if a.asset_type == 'image' and a.id != model.thumbnail_asset_id %}
+              {% if a.asset_type == 'image' and a.filename != model.thumbnail_filename %}
                 <form method="post" action="/models/{{ model.id }}/thumbnail/{{ a.id }}" class="inline">
                   <button class="text-xs text-crimson hover:text-crimson dark:text-crimson">Set as thumbnail</button>
                 </form>

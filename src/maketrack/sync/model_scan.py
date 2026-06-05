@@ -149,63 +149,40 @@ async def scan_models(session: AsyncSession, settings: Settings) -> ScanResult:
                     )
                     asset_ids.append(asset.id)
 
-                    # Auto-extract 3MF thumbnail if needed.
-                    if (
-                        asset_type == "3mf"
-                        and not thumbnail_filename
-                        and (folder / "photos").exists()
-                    ):
+                    # Auto-extract a 3MF thumbnail when the model has none
+                    # yet (either from frontmatter or set earlier this scan).
+                    if asset_type == "3mf" and not thumbnail_filename:
                         try:
                             thumb_bytes = extract_thumbnail_from_3mf(asset_file)
-                            if thumb_bytes:
-                                thumb_filename = f"{asset_file.stem}_thumbnail.png"
-                                thumb_path = folder / "photos" / thumb_filename
-                                thumb_path.write_bytes(thumb_bytes)
-
-                                # Upsert the thumbnail asset.
-                                thumb_asset = await session.run_sync(
-                                    _upsert_asset,
-                                    model.id,
-                                    "image",
-                                    thumb_filename,
-                                    f"{folder_name}/photos/{thumb_filename}",
-                                    len(thumb_bytes),
-                                    generated=True,
-                                )
-                                asset_ids.append(thumb_asset.id)
-
-                                # Update model with new thumbnail_filename and re-hash.
-                                new_thumbnail_filename = thumb_filename
-                                readme_content = readme_content.replace(
-                                    f"thumbnail: {thumbnail_filename}",
-                                    f"thumbnail: {new_thumbnail_filename}",
-                                )
-                                if not thumbnail_filename:
-                                    # Add the line if it didn't exist.
-                                    lines = readme_content.split("\n")
-                                    for i, line in enumerate(lines):
-                                        if line.startswith("---") and i > 0:
-                                            lines.insert(
-                                                i,
-                                                f"thumbnail: {new_thumbnail_filename}",
-                                            )
-                                            break
-                                    readme_content = "\n".join(lines)
-                                    readme_hash = hashlib.sha256(
-                                        readme_content.encode()
-                                    ).hexdigest()
-                                    readme_path.write_text(
-                                        readme_content, encoding="utf-8"
-                                    )
                         except Exception as e:
-                            logger.warning(
-                                f"Failed to extract thumbnail from {file_path}: {e}"
+                            logger.warning(f"Failed to extract thumbnail from {file_path}: {e}")
+                            thumb_bytes = None
+                        if thumb_bytes:
+                            photos_dir.mkdir(exist_ok=True)
+                            thumb_filename = f"{asset_file.stem}_thumbnail.png"
+                            (photos_dir / thumb_filename).write_bytes(thumb_bytes)
+
+                            thumb_asset = await session.run_sync(
+                                _upsert_asset,
+                                model.id,
+                                "image",
+                                thumb_filename,
+                                f"{folder_name}/photos/{thumb_filename}",
+                                len(thumb_bytes),
+                                generated=True,
                             )
+                            asset_ids.append(thumb_asset.id)
+
+                            # Persist the choice: write it back into the
+                            # README frontmatter (so a re-scan is stable) and
+                            # onto the row, then remember it for this folder.
+                            thumbnail_filename = thumb_filename
+                            model.thumbnail_filename = thumb_filename
+                            model.readme_hash = _set_readme_thumbnail(readme_path, thumb_filename)
 
             # Update asset_ids on model.
             if asset_ids:
                 model.asset_ids = json.dumps(asset_ids)
-                rows_upserted += 1
 
         except Exception as e:
             logger.error(f"Error scanning {folder_name}: {e!s}")
@@ -224,6 +201,19 @@ async def scan_models(session: AsyncSession, settings: Settings) -> ScanResult:
         rows_deleted=rows_deleted,
         errors=errors,
     )
+
+
+def _set_readme_thumbnail(readme_path, thumbnail_filename: str) -> str:
+    """Write `thumbnail:` into the README frontmatter and return the new hash.
+
+    Uses python-frontmatter so we round-trip YAML correctly instead of
+    string-poking the raw text. Keeps the body intact.
+    """
+    post = frontmatter.load(str(readme_path))
+    post["thumbnail"] = thumbnail_filename
+    new_content = frontmatter.dumps(post)
+    readme_path.write_text(new_content, encoding="utf-8")
+    return hashlib.sha256(new_content.encode()).hexdigest()
 
 
 def _upsert_model(
@@ -293,9 +283,7 @@ def _mark_malformed(session: Session, folder_name: str) -> None:
 
 def _archive_orphans(session: Session, scanned_folders: set[str]) -> int:
     """Delete Model rows whose folder_name is not in scanned_folders."""
-    orphans = session.query(Model).filter(
-        ~Model.folder_name.in_(scanned_folders)
-    ).all()
+    orphans = session.query(Model).filter(~Model.folder_name.in_(scanned_folders)).all()
     count = len(orphans)
     for orphan in orphans:
         session.delete(orphan)

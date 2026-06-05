@@ -9,7 +9,7 @@ from maketrack.config import get_settings
 from maketrack.db import get_session
 from maketrack.schemas.model import ModelAssetRead
 from maketrack.services import assets as svc
-from maketrack.services.uploads import UploadError, delete_upload
+from maketrack.services.uploads import UploadError, delete_model_file
 
 router = APIRouter(tags=["assets"])
 
@@ -50,7 +50,7 @@ async def upload_asset(
 async def delete_asset(asset_id: int, session: SessionDep) -> None:
     file_path = await svc.delete_asset(session, asset_id)
     await session.commit()
-    delete_upload(file_path)
+    delete_model_file(file_path)
 
 
 @router.post("/api/models/{model_id}/thumbnail")
@@ -60,7 +60,7 @@ async def set_thumbnail(model_id: int, payload: SetThumbnailPayload, session: Se
     except UploadError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     await session.commit()
-    return {"id": model.id, "thumbnail_asset_id": model.thumbnail_asset_id}
+    return {"id": model.id, "thumbnail_filename": model.thumbnail_filename}
 
 
 @router.get("/assets/{asset_id}/download")
@@ -72,7 +72,7 @@ async def download_asset(asset_id: int, session: SessionDep) -> FileResponse:
     something sensible in their Downloads folder, not a UUID.
     """
     asset = await svc.get_asset(session, asset_id)
-    target = (get_settings().uploads_path / asset.file_path).resolve()
+    target = (get_settings().models_path / asset.file_path).resolve()
     if not target.is_file():
         raise HTTPException(status.HTTP_404_NOT_FOUND)
     return FileResponse(

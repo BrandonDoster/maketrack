@@ -52,9 +52,7 @@ async def ensure_fresh_models(
     """
     async with sessionmaker() as session:
         # Check the oldest model's updated_at.
-        result = await session.execute(
-            select(func.min(Model.updated_at)).select_from(Model)
-        )
+        result = await session.execute(select(func.min(Model.updated_at)).select_from(Model))
         oldest_updated = result.scalar()
 
     now = datetime.now(datetime.UTC)

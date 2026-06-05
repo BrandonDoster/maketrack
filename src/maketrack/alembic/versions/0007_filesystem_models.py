@@ -36,7 +36,9 @@ def upgrade() -> None:
         batch.add_column(sa.Column("readme_hash", sa.String(), nullable=True))
         batch.add_column(sa.Column("thumbnail_filename", sa.String(), nullable=True))
         batch.add_column(sa.Column("asset_ids", sa.String(), nullable=True))
-        batch.add_column(sa.Column("readme_malformed", sa.Boolean(), nullable=False, server_default="0"))
+        batch.add_column(
+            sa.Column("readme_malformed", sa.Boolean(), nullable=False, server_default="0")
+        )
         batch.create_unique_constraint("uq_models_folder_name", ["folder_name"])
 
     # Step 2: Drop and recreate project_models with model_asset_id instead of model_id.
@@ -54,7 +56,10 @@ def upgrade() -> None:
         sa.Column(
             "model_asset_id",
             sa.Integer(),
-            sa.ForeignKey("model_assets.id", ondelete="RESTRICT"),
+            # CASCADE: deleting a model folder on disk removes the Model +
+            # ModelAssets, and these links go with them (the filesystem is
+            # the source of truth). See ProjectModel ORM for the rationale.
+            sa.ForeignKey("model_assets.id", ondelete="CASCADE"),
             primary_key=True,
             nullable=False,
         ),

@@ -1,16 +1,22 @@
 from httpx import AsyncClient
 
+from tests.factories import add_model_asset
+
 
 async def _make_models(client: AsyncClient) -> tuple[int, int, int]:
     """Create three models, two of which get linked to a project. Returns
-    (standalone_id, in_project_a_id, in_project_b_id)."""
+    (standalone_id, in_project_a_id, in_project_b_id). The two linked models
+    each get an STL asset, since project links target a specific file."""
     standalone = (await client.post("/api/models", json={"name": "Standalone"})).json()["id"]
     in_proj_a = (await client.post("/api/models", json={"name": "ProjPart A"})).json()["id"]
     in_proj_b = (await client.post("/api/models", json={"name": "ProjPart B"})).json()["id"]
 
+    asset_a = await add_model_asset(client, in_proj_a)
+    asset_b = await add_model_asset(client, in_proj_b)
+
     proj = (await client.post("/api/projects", json={"name": "Voron"})).json()["id"]
-    await client.post(f"/api/projects/{proj}/models", json={"model_id": in_proj_a})
-    await client.post(f"/api/projects/{proj}/models", json={"model_id": in_proj_b})
+    await client.post(f"/api/projects/{proj}/models", json={"model_asset_id": asset_a})
+    await client.post(f"/api/projects/{proj}/models", json={"model_asset_id": asset_b})
     return standalone, in_proj_a, in_proj_b
 
 
@@ -115,7 +121,8 @@ async def test_details_view_shows_project_chip_on_name(client: AsyncClient) -> N
     a project, regardless of whether it has user-added tags."""
     proj = (await client.post("/api/projects", json={"name": "Voron Build"})).json()["id"]
     m = (await client.post("/api/models", json={"name": "BedFoot"})).json()["id"]
-    await client.post(f"/api/projects/{proj}/models", json={"model_id": m})
+    asset_id = await add_model_asset(client, m)
+    await client.post(f"/api/projects/{proj}/models", json={"model_asset_id": asset_id})
 
     resp = await client.get("/models?view=details")
     assert "in 1 project" in resp.text
@@ -139,7 +146,8 @@ async def test_cookies_become_default_for_models_list(client: AsyncClient) -> No
     await client.post("/api/models", json={"name": "Library"})
     proj = (await client.post("/api/projects", json={"name": "Voron"})).json()["id"]
     in_proj = (await client.post("/api/models", json={"name": "Bracket"})).json()["id"]
-    await client.post(f"/api/projects/{proj}/models", json={"model_id": in_proj})
+    asset_id = await add_model_asset(client, in_proj)
+    await client.post(f"/api/projects/{proj}/models", json={"model_asset_id": asset_id})
 
     # Initial visit — defaults to cards + no filter, both models visible.
     initial = await client.get("/models")
@@ -182,7 +190,8 @@ async def test_empty_after_filter_shows_useful_message(client: AsyncClient) -> N
     # All models linked to a project; filtering them out leaves nothing.
     proj = (await client.post("/api/projects", json={"name": "P"})).json()["id"]
     m = (await client.post("/api/models", json={"name": "OnlyOne"})).json()["id"]
-    await client.post(f"/api/projects/{proj}/models", json={"model_id": m})
+    asset_id = await add_model_asset(client, m)
+    await client.post(f"/api/projects/{proj}/models", json={"model_asset_id": asset_id})
 
     resp = await client.get("/models?hide_project_models=true")
     assert resp.status_code == 200

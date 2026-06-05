@@ -19,6 +19,7 @@ from maketrack.models.project import (
     ProjectModel,
 )
 from maketrack.services.models import decode_tags as decode_model_tags
+from maketrack.services.models import read_description
 from maketrack.services.projects import decode_tags as decode_project_tags
 
 
@@ -45,12 +46,14 @@ def model_to_dict(m: Model) -> dict:
     return {
         "id": m.id,
         "name": m.name,
-        "description": m.description,
+        "folder_name": m.folder_name,
+        # description is the README.md body on disk, not a column.
+        "description": read_description(m),
         "source_type": m.source_type,
         "source_url": m.source_url,
         "notes": m.notes,
         "tags": decode_model_tags(m.tags),
-        "thumbnail_asset_id": m.thumbnail_asset_id,
+        "thumbnail_filename": m.thumbnail_filename,
         "created_at": _iso(m.created_at),
         "updated_at": _iso(m.updated_at),
     }
@@ -112,7 +115,7 @@ def inventory_item_to_dict(i: InventoryItem) -> dict:
 
 def project_model_link_to_dict(link: ProjectModel) -> dict:
     return {
-        "model_id": link.model_id,
+        "model_asset_id": link.model_asset_id,
         "qty_to_print": link.qty_to_print,
         "status": link.status,
         "notes": link.notes,

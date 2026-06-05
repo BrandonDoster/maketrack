@@ -90,11 +90,13 @@ async def list_models(project_id: int, session: SessionDep) -> list[ProjectModel
     return [
         ProjectModelLinkRead(
             project_id=h.link.project_id,
-            model_id=h.link.model_id,
+            model_asset_id=h.link.model_asset_id,
             qty_to_print=h.link.qty_to_print,
             status=h.link.status,
             notes=h.link.notes,
             model_name=h.model.name,
+            model_folder_name=h.model.folder_name,
+            asset_filename=h.asset.filename,
             model_thumbnail_path=h.thumbnail_path,
         )
         for h in rows
@@ -114,21 +116,21 @@ async def add_model(
     return ProjectModelLinkRead.model_validate(link)
 
 
-@router.patch("/{project_id}/models/{model_id}", response_model=ProjectModelLinkRead)
+@router.patch("/{project_id}/models/{model_asset_id}", response_model=ProjectModelLinkRead)
 async def update_model_link(
     project_id: int,
-    model_id: int,
+    model_asset_id: int,
     payload: ProjectModelLinkUpdate,
     session: SessionDep,
 ) -> ProjectModelLinkRead:
-    link = await link_svc.update_model_link(session, project_id, model_id, payload)
+    link = await link_svc.update_model_link(session, project_id, model_asset_id, payload)
     await session.commit()
     return ProjectModelLinkRead.model_validate(link)
 
 
-@router.delete("/{project_id}/models/{model_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def remove_model_link(project_id: int, model_id: int, session: SessionDep) -> None:
-    await link_svc.remove_model(session, project_id, model_id)
+@router.delete("/{project_id}/models/{model_asset_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_model_link(project_id: int, model_asset_id: int, session: SessionDep) -> None:
+    await link_svc.remove_model(session, project_id, model_asset_id)
     await session.commit()
 
 

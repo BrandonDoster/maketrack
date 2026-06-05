@@ -52,6 +52,7 @@ These are deferred but the data model should accommodate them so we don't end up
 - FastAPI + SQLAlchemy 2.0 async + Alembic + aiosqlite
 - HTMX + Alpine.js + Tailwind CSS (Tailwind compiled at build time, no Node runtime in the final image)
 - three.js + STLLoader, lazy-loaded only on the model detail page
+- python-frontmatter (parse/write model README.md YAML frontmatter) + mistune (render the README markdown body as the model description)
 - Pydantic-Settings for env-driven config
 - structlog for JSON logging
 - pytest + httpx test client + factory-boy
@@ -85,7 +86,7 @@ maketrack/
 │   │   ├── base.py             # FilamentSource protocol
 │   │   ├── local.py
 │   │   └── spoolman.py
-│   ├── sync/                   # sync engine, TTL, locking
+│   ├── sync/                   # filament sync (TTL/locking) + model_scan.py (filesystem→DB)
 │   ├── mcp/                    # MCP server entrypoint and tools
 │   ├── templates/              # Jinja2 templates for HTMX responses
 │   ├── static/                 # compiled Tailwind CSS, three.js bundle, alpine
@@ -123,7 +124,8 @@ No uv binary in the final image.
 Volumes (mount in compose):
 
 - `/data` — SQLite DB at `/data/maketrack.db`
-- `/uploads` — model assets and photos
+- `/uploads` — project / printer / inventory photos
+- `/maketrack-models` — the model library (one folder per model; see [models](#models))
 
 GHCR publish on `v*.*.*` tags. Tags pushed: `vX.Y.Z` always, `latest` only on non-prerelease tags. Build multi-arch (`linux/amd64`, `linux/arm64`).
 
@@ -134,7 +136,8 @@ All via env vars, prefix `MAKETRACK_`, parsed by Pydantic-Settings.
 | Var | Default | Purpose |
 |---|---|---|
 | `MAKETRACK_DB_PATH` | `/data/maketrack.db` | SQLite path |
-| `MAKETRACK_UPLOADS_PATH` | `/uploads` | Asset storage root |
+| `MAKETRACK_UPLOADS_PATH` | `/uploads` | Photo storage root (projects/printers/inventory) |
+| `MAKETRACK_MODELS_PATH` | `/maketrack-models` | Model library root (folder-per-model) |
 | `MAKETRACK_LOG_LEVEL` | `INFO` | structlog level |
 | `MAKETRACK_BIND_HOST` | `0.0.0.0` | uvicorn bind address |
 | `MAKETRACK_BIND_PORT` | `8000` | uvicorn port |
@@ -304,36 +307,71 @@ printer_build_models (
 
 ### models
 
+> **Filesystem-first storage (migration 0007).** Models are no longer
+> SQLite-only rows with files dumped in a flat `/uploads/models/<uuid>`
+> tree. Each model is now a **folder on disk** under `MAKETRACK_MODELS_PATH`
+> (default `/maketrack-models`), and the DB is an *index* over that tree:
+>
+> ```
+> /maketrack-models/<folder_name>/
+>   README.md          # YAML frontmatter (name, thumbnail, source_type,
+>                      #   source_url, tags, notes) + markdown body = description
+>   photos/            # images + extracted/generated thumbnails
+>   models/            # printable files: stl, step, 3mf, gcode
+> ```
+>
+> Why: the library is browsable/editable directly over an NFS/SMB share, it
+> backs up as a single directory tree, and metadata lives next to the files.
+>
+> **Two write paths, both kept in sync:**
+> 1. **Web app / MCP** — every create / edit / delete / upload writes through
+>    to disk *and* the DB in the same request (no waiting for a scan). README
+>    is rewritten on edit; the folder is `rmtree`d on delete.
+> 2. **`sync/model_scan.py`** — reconciles edits made directly on the share
+>    (daily APScheduler job + lazy-on-browse + manual "Sync now"). It upserts
+>    a Model per folder and a ModelAsset per file, extracts 3MF thumbnails,
+>    and hard-deletes Models whose folders vanished.
+>
+> `folder_name` is the slug of the name at creation, unique, and **stable
+> across renames** (renaming would invalidate every asset `file_path`). The
+> display name lives in README frontmatter.
+
 A printable thing. Standalone or linked to projects via `project_models`.
 
 ```sql
 models (
   id                    INTEGER PRIMARY KEY,
-  name                  TEXT NOT NULL,
-  description           TEXT,
+  folder_name           TEXT NOT NULL UNIQUE,   -- folder under MAKETRACK_MODELS_PATH; stable across renames
+  name                  TEXT NOT NULL,          -- display name (mirrors README frontmatter)
   source_type           TEXT,                   -- 'local' | 'printables' | 'thingiverse' | 'github' | 'other'
   source_url            TEXT,
-  thumbnail_asset_id    INTEGER,                -- FK to model_assets.id; nullable
+  thumbnail_filename    TEXT,                   -- filename in <folder>/photos/; nullable
+  readme_hash           TEXT,                   -- SHA-256 of README.md for scan change-detection
+  asset_ids             TEXT,                   -- JSON array of model_assets.id (scan bookkeeping)
+  readme_malformed      BOOLEAN DEFAULT FALSE,  -- set when the scan can't parse the README
   notes                 TEXT,
   tags                  TEXT,                   -- JSON array of strings (v1); promote to a tags table later if it gets messy
   created_at            TIMESTAMP,
-  updated_at            TIMESTAMP,
-
-  FOREIGN KEY (thumbnail_asset_id) REFERENCES model_assets(id) ON DELETE SET NULL
+  updated_at            TIMESTAMP
 )
 ```
 
+`description` is **not** a column — it's the markdown body of `README.md`,
+read from disk on demand (`services.models.read_description`) and rendered
+with mistune on the detail page. `thumbnail_filename` replaced the old
+`thumbnail_asset_id` FK: a thumbnail is just an image file in `photos/`.
+
 ### model_assets
 
-Files attached to a model. Grouping is by `model_id`, not filename — the user (or upload flow) explicitly groups files into a model.
+Files attached to a model. Grouping is by `model_id` (the owning folder), not filename.
 
 ```sql
 model_assets (
   id                  INTEGER PRIMARY KEY,
   model_id            INTEGER NOT NULL,
   asset_type          TEXT NOT NULL,            -- 'stl' | 'step' | '3mf' | 'gcode' | 'image' | 'other'
-  filename            TEXT NOT NULL,            -- original filename, preserved for downloads
-  file_path           TEXT NOT NULL,            -- relative to /uploads, e.g. 'models/<uuid>'
+  filename            TEXT NOT NULL,            -- on-disk filename (original, de-duped on collision)
+  file_path           TEXT NOT NULL,            -- relative to MODELS_PATH, e.g. '<folder>/models/part.stl'
   file_size           INTEGER,
   sha256              TEXT,
   generated           BOOLEAN DEFAULT FALSE,    -- TRUE for 3MF-extracted thumbnails, etc.
@@ -343,9 +381,19 @@ model_assets (
 )
 ```
 
-Uploads stored flat as `/uploads/models/<uuid>` with the original filename only in `filename`. No path traversal possible because the user never picks a path. Original filename is preserved for downloads via `Content-Disposition`.
+`file_path` is relative to `MAKETRACK_MODELS_PATH` and served via
+`/model-media/<path>` (the older `/media/<path>` still serves project /
+printer / inventory photos from `MAKETRACK_UPLOADS_PATH`). The original
+filename *is* the on-disk name (de-duplicated with ` (2)` on collision) so
+the share stays human-browsable. Images go to `photos/`, everything
+printable to `models/`.
 
-On 3MF asset upload: open as zip, extract embedded thumbnail PNG (OrcaSlicer commonly stores it at `Metadata/_rels/thumbnail.png` or `Metadata/plate_1.png` — check what's actually in the archive and fall back gracefully), save as a `model_asset` with `asset_type='image'` and `generated=true`. If the model has no `thumbnail_asset_id` set, point it at this new asset.
+On 3MF upload (web/MCP) or 3MF discovery (scan): open as zip, extract the
+embedded thumbnail PNG (OrcaSlicer commonly stores it at
+`Metadata/_rels/thumbnail.png` or `Metadata/plate_1.png` — fall back to any
+PNG under `Metadata/`), save it into `photos/` as a `generated=true` image
+asset. If the model has no `thumbnail_filename` yet, point it at the new
+image and write that back into the README frontmatter.
 
 ### projects
 
@@ -368,19 +416,29 @@ projects (
 
 ### project_models
 
+A project links to a **specific file (`model_asset_id`)**, not a whole model
+collection — so a project can pull just the one STL it prints from a model
+that ships several variants. `ON DELETE CASCADE` (not RESTRICT): when a
+model's folder is deleted on disk, the scan drops the Model → its
+ModelAssets → these links, all without aborting.
+
 ```sql
 project_models (
   project_id          INTEGER NOT NULL,
-  model_id            INTEGER NOT NULL,
+  model_asset_id      INTEGER NOT NULL,
   qty_to_print        INTEGER NOT NULL DEFAULT 1,
   status              TEXT DEFAULT 'pending',   -- 'pending' | 'printed' | 'failed'
   notes               TEXT,
 
-  PRIMARY KEY (project_id, model_id),
+  PRIMARY KEY (project_id, model_asset_id),
   FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-  FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE RESTRICT
+  FOREIGN KEY (model_asset_id) REFERENCES model_assets(id) ON DELETE CASCADE
 )
 ```
+
+> `printer_build_models` still links a whole **model** (`model_id` →
+> `models.id`), not an asset — a build entry references the model collection,
+> while a project references the exact file it prints.
 
 ### project_filaments
 
@@ -492,36 +550,48 @@ Routes catch `RemoteFilamentError`:
 
 ## File handling
 
-### Layout
+Two roots:
+
+- **`MAKETRACK_UPLOADS_PATH`** (`/uploads`) — project / printer / inventory
+  photos. Flat `<subdir>/<uuid><ext>` layout, served via `/media/<path>`.
+- **`MAKETRACK_MODELS_PATH`** (`/maketrack-models`) — the model library
+  (see the [models](#models) section). Served via `/model-media/<path>`.
+
+### Model folder layout
 
 ```
-/uploads/
-  models/
-    <uuid>          # one file per upload, original filename only in DB
+/maketrack-models/<folder_name>/
+  README.md          # frontmatter + body(description)
+  photos/<file>      # images + generated thumbnails
+  models/<file>      # stl / step / 3mf / gcode
 ```
 
-Flat structure with UUID filenames. The user never sees or chooses the path. Original filename lives in `model_assets.filename` and is used on download via `Content-Disposition: attachment; filename="<original_filename>"` with content type inferred from `asset_type`.
+The on-disk filename is the original name (de-duped with ` (2)` on
+collision), stored verbatim in `model_assets.filename` and used on download
+via `Content-Disposition: attachment; filename="<original>"`. Both media
+routes resolve the target and assert it sits inside the root (traversal
+guard) and is a regular file.
 
 ### Upload endpoint
 
 `POST /models/{model_id}/assets` accepts multipart, single or multiple files. For each:
 
-1. Save to `/uploads/models/<uuid>`.
+1. Write to `<folder>/photos/<filename>` (images) or `<folder>/models/<filename>` (everything else).
 2. Compute SHA-256.
-3. Insert `model_assets` row.
-4. If `asset_type = '3mf'`: open the zip, look for an embedded thumbnail PNG, save it as a separate asset with `generated=true`. If the model has no thumbnail set, point `models.thumbnail_asset_id` at the new image asset.
+3. Insert `model_assets` row (write-through, same request).
+4. If `asset_type = '3mf'`: open the zip, extract the embedded thumbnail PNG into `photos/`, save it as a separate `generated=true` asset. If the model has no thumbnail set, set `models.thumbnail_filename` and rewrite the README frontmatter.
 
 ### Thumbnails
 
-- `models.thumbnail_asset_id` is a nullable FK to `model_assets.id`.
-- The pointed asset is in the same model and has `asset_type = 'image'`.
-- Set explicitly via the UI (Set as thumbnail button) or via the MCP `set_model_thumbnail` tool.
-- Set automatically the first time a 3MF is uploaded if no thumbnail is yet set.
-- Replace by changing the FK; the old image asset stays as a regular asset.
+- `models.thumbnail_filename` names an image file in the model's `photos/` dir.
+- Set explicitly via the UI (Set as thumbnail button) or via the MCP `set_model_thumbnail` tool — both write the choice back into README frontmatter.
+- Set automatically the first time a 3MF (or any image) is added if no thumbnail is yet set.
+- Replace by changing `thumbnail_filename`; the old image file stays as a regular asset.
+- Deleting the thumbnail asset clears `thumbnail_filename` and rewrites the README.
 
 ## 3D preview
 
-STL only in v1. The model detail page lazy-loads three.js + STLLoader (~300 KB JS, only on that page) and renders the STL client-side. No server-side mesh processing.
+STL only in v1. The model detail page lazy-loads three.js + STLLoader (~300 KB JS, only on that page) and renders the STL client-side from `/model-media/<file_path>`. No server-side mesh processing.
 
 3MF and STEP are download-only in v1. Format badges in the list view tell the user what's available. Phase 2 considers 3MF preview via three.js's `3MFLoader`. STEP preview is permanently out of scope — too heavy.
 
@@ -542,9 +612,9 @@ A separate FastAPI app within the same package, bound to localhost only. Talks t
 
 ### v1 tools (write, scoped to model creation)
 
-- `create_model(name, description, source_type, source_url)` → new model
-- `upload_model_asset(model_id, asset_type, content, set_as_thumbnail=False)` → new asset; `content` accepts MCP image content blocks for image uploads, base64 for binary file types
-- `set_model_thumbnail(model_id, asset_id)` → updates `models.thumbnail_asset_id`
+- `create_model(name, description, source_type, source_url)` → new model (creates the folder + README on disk)
+- `upload_model_asset(model_id, filename, content_base64, set_as_thumbnail=False)` → new asset written into the model folder; `asset_type` is inferred from the filename extension
+- `set_model_thumbnail(model_id, asset_id)` → sets `models.thumbnail_filename` and rewrites the README frontmatter
 
 Other writes (project create/update, filament edit, inventory edit) come in phase 2. v1 keeps writes scoped to model creation because that's the highest-friction path through the UI.
 

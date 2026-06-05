@@ -103,7 +103,7 @@ async def test_upload_3mf_extracts_thumbnail_and_auto_sets_it(
     assert generated[0]["asset_type"] == "image"
 
     model = (await client.get(f"/api/models/{mid}")).json()
-    assert model["thumbnail_asset_id"] == generated[0]["id"]
+    assert model["thumbnail_filename"] == generated[0]["filename"]
 
 
 async def test_upload_image_auto_sets_thumbnail_when_none(client: AsyncClient) -> None:
@@ -115,10 +115,10 @@ async def test_upload_image_auto_sets_thumbnail_when_none(client: AsyncClient) -
         files={"file": ("hero.png", io.BytesIO(_PNG), "image/png")},
     )
     assert resp.status_code == 201
-    asset_id = resp.json()["id"]
+    filename = resp.json()["filename"]
 
     model = (await client.get(f"/api/models/{mid}")).json()
-    assert model["thumbnail_asset_id"] == asset_id
+    assert model["thumbnail_filename"] == filename
 
 
 async def test_set_thumbnail_rejects_non_image(client: AsyncClient) -> None:
@@ -156,7 +156,7 @@ async def test_download_uses_original_filename(client: AsyncClient) -> None:
     assert "attachment" in cd
 
 
-async def test_delete_asset_clears_thumbnail_via_set_null(client: AsyncClient) -> None:
+async def test_delete_asset_clears_thumbnail(client: AsyncClient) -> None:
     create = await client.post("/api/models", json={"name": "X"})
     mid = create.json()["id"]
     upload = await client.post(
@@ -164,15 +164,16 @@ async def test_delete_asset_clears_thumbnail_via_set_null(client: AsyncClient) -
         files={"file": ("hero.png", io.BytesIO(_PNG), "image/png")},
     )
     asset_id = upload.json()["id"]
+    filename = upload.json()["filename"]
 
     model_before = (await client.get(f"/api/models/{mid}")).json()
-    assert model_before["thumbnail_asset_id"] == asset_id
+    assert model_before["thumbnail_filename"] == filename
 
     delete = await client.delete(f"/api/assets/{asset_id}")
     assert delete.status_code == 204
 
     model_after = (await client.get(f"/api/models/{mid}")).json()
-    assert model_after["thumbnail_asset_id"] is None
+    assert model_after["thumbnail_filename"] is None
 
 
 async def test_delete_model_cascades_assets(client: AsyncClient) -> None:

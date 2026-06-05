@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented here. Format roughly follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed
+- **Filesystem-first model storage.** Models are now folders on disk under
+  `MAKETRACK_MODELS_PATH` (default `/maketrack-models`): a `README.md` with
+  YAML frontmatter + a markdown-body description, plus `photos/` and
+  `models/` subdirs. The SQLite tables become an index over that tree, so a
+  model library can be browsed and edited directly over an NFS/SMB share and
+  backed up as a single directory.
+- Web and MCP writes (create / edit / delete / asset upload) now write
+  through to disk **and** the DB in the same request. A new scan engine
+  (`sync/model_scan.py`) reconciles edits made directly on the share — daily
+  job + lazy-on-browse + manual "Sync now" — extracting 3MF thumbnails and
+  removing models whose folders have vanished.
+- Model assets are served from the new `/model-media/<path>` route with the
+  original filename preserved on disk; `/media/<path>` still serves project,
+  printer, and inventory photos.
+
+### Breaking
+- `project_models` now links a specific file (`model_asset_id`,
+  `ON DELETE CASCADE`) instead of a whole model (`model_id`). Deleting a
+  model folder cascades through its assets to these links.
+- `models.description` → README.md body; `models.thumbnail_asset_id` →
+  `models.thumbnail_filename`; added `models.folder_name` (unique),
+  `readme_hash`, `asset_ids`, `readme_malformed`.
+- New env var `MAKETRACK_MODELS_PATH`; new mount `/maketrack-models`.
+- New dependencies: `python-frontmatter`, `mistune`.
+
 ## [0.1.1] - 2026-05-12
 
 ### Fixed

@@ -5,6 +5,7 @@ from tests.factories import (
     InventoryItemFactory,
     LocalFilamentFactory,
     PrinterFactory,
+    add_model_asset,
     persist,
 )
 
@@ -159,10 +160,11 @@ async def test_add_model_link_idempotent(client: AsyncClient) -> None:
     pid = project.json()["id"]
     model = await client.post("/api/models", json={"name": "M"})
     mid = model.json()["id"]
+    aid = await add_model_asset(client, mid)
 
     first = await client.post(
         f"/api/projects/{pid}/models",
-        json={"model_id": mid, "qty_to_print": 2},
+        json={"model_asset_id": aid, "qty_to_print": 2},
     )
     assert first.status_code == 201
 
@@ -170,7 +172,7 @@ async def test_add_model_link_idempotent(client: AsyncClient) -> None:
     # service treats it as an upsert.
     second = await client.post(
         f"/api/projects/{pid}/models",
-        json={"model_id": mid, "qty_to_print": 5},
+        json={"model_asset_id": aid, "qty_to_print": 5},
     )
     assert second.status_code == 201
     listing = await client.get(f"/api/projects/{pid}/models")
@@ -183,9 +185,10 @@ async def test_remove_model_link(client: AsyncClient) -> None:
     pid = project.json()["id"]
     model = await client.post("/api/models", json={"name": "M"})
     mid = model.json()["id"]
-    await client.post(f"/api/projects/{pid}/models", json={"model_id": mid})
+    aid = await add_model_asset(client, mid)
+    await client.post(f"/api/projects/{pid}/models", json={"model_asset_id": aid})
 
-    delete = await client.delete(f"/api/projects/{pid}/models/{mid}")
+    delete = await client.delete(f"/api/projects/{pid}/models/{aid}")
     assert delete.status_code == 204
     listing = await client.get(f"/api/projects/{pid}/models")
     assert listing.json() == []

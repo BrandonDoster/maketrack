@@ -87,6 +87,7 @@ async def get_project(project_id: int) -> dict:
                 {
                     **project_model_link_to_dict(h.link),
                     "model_name": h.model.name,
+                    "asset_filename": h.asset.filename,
                 }
                 for h in models
             ],
@@ -296,8 +297,11 @@ async def upload_model_asset(
 
 @mcp.tool()
 async def set_model_thumbnail(model_id: int, asset_id: int) -> dict:
-    """Set models.thumbnail_asset_id. The asset must be an image asset
-    that belongs to the same model.
+    """Set the model's thumbnail to an existing image asset.
+
+    The asset must be an image asset that belongs to the same model. The
+    choice is written to models.thumbnail_filename and back to the
+    README.md frontmatter on disk.
     """
     sm = get_sessionmaker()
     async with sm() as session:
@@ -306,7 +310,7 @@ async def set_model_thumbnail(model_id: int, asset_id: int) -> dict:
         except NotFoundError:
             raise
         await session.commit()
-        return {"id": model.id, "thumbnail_asset_id": model.thumbnail_asset_id}
+        return {"id": model.id, "thumbnail_filename": model.thumbnail_filename}
 
 
 def _http_app() -> Any:

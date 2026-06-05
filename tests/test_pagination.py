@@ -3,7 +3,12 @@
 from httpx import AsyncClient
 
 from maketrack.services._pagination import DEFAULT_PAGE_SIZE
-from tests.factories import InventoryItemFactory, LocalFilamentFactory, persist
+from tests.factories import (
+    InventoryItemFactory,
+    LocalFilamentFactory,
+    add_model_asset,
+    persist,
+)
 
 # ── Page math ─────────────────────────────────────────────────────────────
 
@@ -170,7 +175,8 @@ async def test_models_pagination_preserves_view_and_filter(
         await client.post("/api/models", json={"name": f"Library-{i:03d}"})
     proj = (await client.post("/api/projects", json={"name": "P"})).json()["id"]
     in_proj = (await client.post("/api/models", json={"name": "ProjPart"})).json()["id"]
-    await client.post(f"/api/projects/{proj}/models", json={"model_id": in_proj})
+    asset_id = await add_model_asset(client, in_proj)
+    await client.post(f"/api/projects/{proj}/models", json={"model_asset_id": asset_id})
 
     resp = await client.get("/models?view=details&hide_project_models=true&page=2")
     # The footer's prev/next preserve view + filter.

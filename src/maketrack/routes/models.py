@@ -7,7 +7,7 @@ from maketrack.db import get_session
 from maketrack.models.model import Model
 from maketrack.schemas.model import ModelCreate, ModelRead, ModelUpdate
 from maketrack.services import models as svc
-from maketrack.services.uploads import delete_upload
+from maketrack.services.uploads import delete_model_folder
 
 router = APIRouter(prefix="/api/models", tags=["models"])
 
@@ -18,12 +18,13 @@ def _to_read(row: Model) -> ModelRead:
     return ModelRead(
         id=row.id,
         name=row.name,
-        description=row.description,
+        folder_name=row.folder_name,
+        description=svc.read_description(row),
         source_type=row.source_type,
         source_url=row.source_url,
         notes=row.notes,
         tags=svc.decode_tags(row.tags),
-        thumbnail_asset_id=row.thumbnail_asset_id,
+        thumbnail_filename=row.thumbnail_filename,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -62,7 +63,6 @@ async def update_model(model_id: int, payload: ModelUpdate, session: SessionDep)
 
 @router.delete("/{model_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_model(model_id: int, session: SessionDep) -> None:
-    paths = await svc.delete_model(session, model_id)
+    folder_name = await svc.delete_model(session, model_id)
     await session.commit()
-    for path in paths:
-        delete_upload(path)
+    delete_model_folder(folder_name)

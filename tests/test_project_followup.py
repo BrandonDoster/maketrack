@@ -2,6 +2,8 @@ import io
 
 from httpx import AsyncClient
 
+from tests.factories import add_model_asset
+
 _PNG = (
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
     b"\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
@@ -450,10 +452,13 @@ async def test_model_qty_to_print_inline_edit(client: AsyncClient) -> None:
     pid = project.json()["id"]
     model = await client.post("/api/models", json={"name": "Bracket"})
     mid = model.json()["id"]
-    await client.post(f"/api/projects/{pid}/models", json={"model_id": mid, "qty_to_print": 1})
+    aid = await add_model_asset(client, mid)
+    await client.post(
+        f"/api/projects/{pid}/models", json={"model_asset_id": aid, "qty_to_print": 1}
+    )
 
     resp = await client.post(
-        f"/projects/{pid}/models/{mid}/qty",
+        f"/projects/{pid}/models/{aid}/qty",
         data={"qty_to_print": "12"},
         headers={"HX-Request": "true"},
     )
@@ -470,10 +475,13 @@ async def test_model_qty_rejects_below_one(client: AsyncClient) -> None:
     pid = project.json()["id"]
     model = await client.post("/api/models", json={"name": "M"})
     mid = model.json()["id"]
-    await client.post(f"/api/projects/{pid}/models", json={"model_id": mid, "qty_to_print": 3})
+    aid = await add_model_asset(client, mid)
+    await client.post(
+        f"/api/projects/{pid}/models", json={"model_asset_id": aid, "qty_to_print": 3}
+    )
 
     await client.post(
-        f"/projects/{pid}/models/{mid}/qty",
+        f"/projects/{pid}/models/{aid}/qty",
         data={"qty_to_print": "0"},
         headers={"HX-Request": "true"},
     )
@@ -548,11 +556,12 @@ async def test_model_link_status_select_renders_in_edit_mode(client: AsyncClient
     pid = project.json()["id"]
     model = await client.post("/api/models", json={"name": "Bracket"})
     mid = model.json()["id"]
-    await client.post(f"/api/projects/{pid}/models", json={"model_id": mid})
+    aid = await add_model_asset(client, mid)
+    await client.post(f"/api/projects/{pid}/models", json={"model_asset_id": aid})
 
     # The inline status select is an edit affordance; gated behind ?edit=true.
     detail = await client.get(f"/projects/{pid}?edit=true")
-    assert f"/projects/{pid}/models/{mid}/status" in detail.text
+    assert f"/projects/{pid}/models/{aid}/status" in detail.text
 
 
 async def test_model_link_status_chip_in_read_mode(client: AsyncClient) -> None:
@@ -562,11 +571,12 @@ async def test_model_link_status_chip_in_read_mode(client: AsyncClient) -> None:
     pid = project.json()["id"]
     model = await client.post("/api/models", json={"name": "Bracket"})
     mid = model.json()["id"]
-    await client.post(f"/api/projects/{pid}/models", json={"model_id": mid})
+    aid = await add_model_asset(client, mid)
+    await client.post(f"/api/projects/{pid}/models", json={"model_asset_id": aid})
 
     detail = await client.get(f"/projects/{pid}")
     # The editable select is hidden in read mode.
-    assert f"/projects/{pid}/models/{mid}/status" not in detail.text
+    assert f"/projects/{pid}/models/{aid}/status" not in detail.text
     # Status chip still shows the value.
     assert ">pending<" in detail.text
 
@@ -576,10 +586,11 @@ async def test_model_status_inline_edit_persists(client: AsyncClient) -> None:
     pid = project.json()["id"]
     model = await client.post("/api/models", json={"name": "Bracket"})
     mid = model.json()["id"]
-    await client.post(f"/api/projects/{pid}/models", json={"model_id": mid})
+    aid = await add_model_asset(client, mid)
+    await client.post(f"/api/projects/{pid}/models", json={"model_asset_id": aid})
 
     resp = await client.post(
-        f"/projects/{pid}/models/{mid}/status",
+        f"/projects/{pid}/models/{aid}/status",
         data={"status": "printed"},
         headers={"HX-Request": "true"},
     )
@@ -597,10 +608,11 @@ async def test_model_status_rejects_invalid_value(client: AsyncClient) -> None:
     pid = project.json()["id"]
     model = await client.post("/api/models", json={"name": "M"})
     mid = model.json()["id"]
-    await client.post(f"/api/projects/{pid}/models", json={"model_id": mid})
+    aid = await add_model_asset(client, mid)
+    await client.post(f"/api/projects/{pid}/models", json={"model_asset_id": aid})
 
     await client.post(
-        f"/projects/{pid}/models/{mid}/status",
+        f"/projects/{pid}/models/{aid}/status",
         data={"status": "shipped"},
         headers={"HX-Request": "true"},
     )

@@ -1,4 +1,7 @@
+import io
+
 import factory
+from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from maketrack.models.external_source import ExternalSource
@@ -65,3 +68,21 @@ async def persist(session: AsyncSession, instance):
     session.add(instance)
     await session.flush()
     return instance
+
+
+def stl_bytes() -> bytes:
+    """Smallest valid binary STL: 80-byte header + uint32 0 triangles."""
+    return b"\x00" * 80 + (0).to_bytes(4, "little")
+
+
+async def add_model_asset(client: AsyncClient, model_id: int, filename: str = "part.stl") -> int:
+    """Upload a small STL to a model and return the new asset id.
+
+    Project links now target a specific ModelAsset, so a test that wants a
+    model "in a project" must first give the model a file to link against.
+    """
+    resp = await client.post(
+        f"/api/models/{model_id}/assets",
+        files={"file": (filename, io.BytesIO(stl_bytes()), "model/stl")},
+    )
+    return resp.json()["id"]

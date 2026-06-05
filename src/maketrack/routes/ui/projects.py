@@ -107,12 +107,12 @@ async def _render_detail(
     project_items = await link_svc.list_project_items(session, project_id)
     bom = await bom_svc.project_bom(session, project_id)
 
-    available_models: list = []
+    available_assets: list = []
     available_filaments: list = []
     available_items: list = []
     printers: list = []
     if edit_mode:
-        available_models = list(await link_svc.list_unlinked_models(session, project_id))
+        available_assets = list(await link_svc.list_unlinked_assets(session, project_id))
         available_filaments = list(
             (
                 await session.execute(
@@ -144,7 +144,7 @@ async def _render_detail(
             "project_filaments": project_filaments,
             "project_items": project_items,
             "bom": bom,
-            "available_models": available_models,
+            "available_assets": available_assets,
             "available_filaments": available_filaments,
             "available_items": available_items,
             "printers": printers,
@@ -234,14 +234,14 @@ async def _models_partial(request: Request, project_id: int, session: AsyncSessi
     reach this from edit mode, so render the section in edit mode."""
     project = await svc.get_project(session, project_id)
     project_models = await link_svc.list_project_models(session, project_id)
-    available_models = await link_svc.list_unlinked_models(session, project_id)
+    available_assets = await link_svc.list_unlinked_assets(session, project_id)
     return templates.TemplateResponse(
         request,
         "projects/_models_section.html",
         {
             "project": project,
             "project_models": project_models,
-            "available_models": available_models,
+            "available_assets": available_assets,
             "edit_mode": True,
         },
     )
@@ -252,7 +252,7 @@ async def add_model(project_id: int, request: Request, session: SessionDep) -> H
     form = await request.form()
     try:
         payload = ProjectModelLinkCreate(
-            model_id=int(form.get("model_id", "0")),
+            model_asset_id=int(form.get("model_asset_id", "0")),
             qty_to_print=max(1, int(form.get("qty_to_print", "1"))),
         )
     except (ValueError, ValidationError):
@@ -276,9 +276,9 @@ async def add_model(project_id: int, request: Request, session: SessionDep) -> H
 _VALID_MODEL_LINK_STATUSES = frozenset({"pending", "printed", "failed"})
 
 
-@router.post("/projects/{project_id}/models/{model_id}/qty", response_class=HTMLResponse)
+@router.post("/projects/{project_id}/models/{model_asset_id}/qty", response_class=HTMLResponse)
 async def update_model_qty(
-    project_id: int, model_id: int, request: Request, session: SessionDep
+    project_id: int, model_asset_id: int, request: Request, session: SessionDep
 ) -> HTMLResponse:
     form = await request.form()
     raw = (form.get("qty_to_print") or "").strip()
@@ -289,7 +289,7 @@ async def update_model_qty(
     if qty is not None and qty >= 1:
         try:
             await link_svc.update_model_link(
-                session, project_id, model_id, ProjectModelLinkUpdate(qty_to_print=qty)
+                session, project_id, model_asset_id, ProjectModelLinkUpdate(qty_to_print=qty)
             )
             await session.commit()
         except NotFoundError:
@@ -301,16 +301,16 @@ async def update_model_qty(
     )
 
 
-@router.post("/projects/{project_id}/models/{model_id}/status", response_class=HTMLResponse)
+@router.post("/projects/{project_id}/models/{model_asset_id}/status", response_class=HTMLResponse)
 async def update_model_status(
-    project_id: int, model_id: int, request: Request, session: SessionDep
+    project_id: int, model_asset_id: int, request: Request, session: SessionDep
 ) -> HTMLResponse:
     form = await request.form()
     raw = (form.get("status") or "").strip()
     if raw in _VALID_MODEL_LINK_STATUSES:
         try:
             await link_svc.update_model_link(
-                session, project_id, model_id, ProjectModelLinkUpdate(status=raw)
+                session, project_id, model_asset_id, ProjectModelLinkUpdate(status=raw)
             )
             await session.commit()
         except NotFoundError:
@@ -322,12 +322,12 @@ async def update_model_status(
     )
 
 
-@router.post("/projects/{project_id}/models/{model_id}/delete", response_class=HTMLResponse)
+@router.post("/projects/{project_id}/models/{model_asset_id}/delete", response_class=HTMLResponse)
 async def remove_model(
-    project_id: int, model_id: int, request: Request, session: SessionDep
+    project_id: int, model_asset_id: int, request: Request, session: SessionDep
 ) -> HTMLResponse:
     try:
-        await link_svc.remove_model(session, project_id, model_id)
+        await link_svc.remove_model(session, project_id, model_asset_id)
         await session.commit()
     except NotFoundError:
         pass
@@ -527,14 +527,16 @@ async def upload_files(
             session, ModelCreate(name=model_name, source_type="local")
         )
         try:
-            await asset_svc.upload_asset(session, model.id, file)
+            asset = await asset_svc.upload_asset(session, model.id, file)
         except UploadError:
             await session.rollback()
             continue
+        # Link the project to the specific uploaded asset (the printable
+        # file), not the whole model collection.
         await link_svc.add_model(
             session,
             project_id,
-            ProjectModelLinkCreate(model_id=model.id, qty_to_print=1),
+            ProjectModelLinkCreate(model_asset_id=asset.id, qty_to_print=1),
         )
         await session.commit()
     return RedirectResponse(

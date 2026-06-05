@@ -228,7 +228,7 @@ async def test_upload_model_asset_with_3mf_extracts_thumbnail(client) -> None:
     detail = await get_model(model_id=mid)
     types = {a["asset_type"] for a in detail["assets"]}
     assert types == {"3mf", "image"}
-    assert detail["thumbnail_asset_id"] is not None  # auto-set from 3MF thumbnail
+    assert detail["thumbnail_filename"] is not None  # auto-set from 3MF thumbnail
 
 
 async def test_upload_model_asset_rejects_bad_base64() -> None:
@@ -242,4 +242,4 @@ async def test_set_model_thumbnail_via_mcp(client) -> None:
     img = await upload_model_asset(model_id=mid, filename="hero.png", content_base64=_b64(_PNG))
 
     out = await set_model_thumbnail(model_id=mid, asset_id=img["id"])
-    assert out["thumbnail_asset_id"] == img["id"]
+    assert out["thumbnail_filename"] == img["filename"]
