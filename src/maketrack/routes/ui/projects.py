@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Request, UploadFile, status
@@ -17,7 +16,6 @@ from maketrack.routes.ui._forms import (
     is_htmx,
     null_empty_strings,
 )
-from maketrack.schemas.model import ModelCreate
 from maketrack.schemas.project import (
     PROJECT_STATUSES,
     ProjectCreate,
@@ -28,9 +26,7 @@ from maketrack.schemas.project import (
     ProjectModelLinkUpdate,
     ProjectUpdate,
 )
-from maketrack.services import assets as asset_svc
 from maketrack.services import bom as bom_svc
-from maketrack.services import models as model_svc
 from maketrack.services import project_links as link_svc
 from maketrack.services import projects as svc
 from maketrack.services.uploads import (
@@ -496,49 +492,6 @@ async def update_item_qty(
             pass
     if is_htmx(request):
         return await _bom_partial(request, project_id, session)
-    return RedirectResponse(
-        url=f"/projects/{project_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
-    )
-
-
-# ── project-side file upload (auto-creates Models, links them) ────────────
-
-
-_MODEL_ASSET_EXTS = frozenset({".stl", ".step", ".stp", ".3mf", ".gcode", ".g", ".gco"})
-
-
-@router.post("/projects/{project_id}/upload-files", response_class=HTMLResponse)
-async def upload_files(
-    project_id: int,
-    session: SessionDep,
-    files: Annotated[list[UploadFile], File()],
-) -> HTMLResponse:
-    project = await svc.get_project(session, project_id)
-    base_name = project.name
-    for file in files:
-        name = (file.filename or "").strip()
-        if not name:
-            continue
-        ext = Path(name).suffix.lower()
-        if ext not in _MODEL_ASSET_EXTS:
-            continue
-        model_name = Path(name).stem or base_name
-        model = await model_svc.create_model(
-            session, ModelCreate(name=model_name, source_type="local")
-        )
-        try:
-            asset = await asset_svc.upload_asset(session, model.id, file)
-        except UploadError:
-            await session.rollback()
-            continue
-        # Link the project to the specific uploaded asset (the printable
-        # file), not the whole model collection.
-        await link_svc.add_model(
-            session,
-            project_id,
-            ProjectModelLinkCreate(model_asset_id=asset.id, qty_to_print=1),
-        )
-        await session.commit()
     return RedirectResponse(
         url=f"/projects/{project_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
     )

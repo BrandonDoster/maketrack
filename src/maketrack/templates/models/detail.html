@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ model.name }} · maketrack{% endblock %}
+{% block title %}{{ (model.name if model else "New model") }} · maketrack{% endblock %}
 
 {% block content %}
 {% set btn_outline = "rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800" %}
@@ -16,88 +16,232 @@
 
 <a href="/models" class="text-sm text-slate-500 hover:text-crimson dark:text-slate-400 dark:hover:text-crimson">← Models</a>
 
-<div class="mt-3 grid grid-cols-1 gap-6 lg:grid-cols-2">
-  {# ── left column: name / fields / description / notes ─────────────── #}
-  <div class="min-w-0">
-    {% if edit_mode %}
-      <form id="model-basic-form" method="post" action="/models/{{ model.id }}" class="space-y-4">
+{% if edit_mode %}
+{# ── Edit / create draft: ONE multipart form. Nothing is persisted until
+     Save — staged files, deletions, field edits and the thumbnail choice
+     all commit together. A beforeunload guard warns about unsaved work. ── #}
+<form id="model-editor"
+      method="post" enctype="multipart/form-data"
+      action="{% if is_new %}/models{% else %}/models/{{ model.id }}{% endif %}"
+      x-data="modelEditor({ thumbnail: '{{ model.thumbnail_filename or '' }}' })"
+      @submit="submitting = true"
+      @input="dirty = true" @change="dirty = true">
+
+  <div class="mt-3 grid grid-cols-1 gap-6 lg:grid-cols-2">
+    {# ── left column: fields ──────────────────────────────────────────── #}
+    <div class="min-w-0 space-y-4">
+      <label class="block">
+        <span class="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Name</span>
+        <input type="text" name="name" required value="{{ model.name or '' }}"
+               placeholder="My Model"
+               class="{{ ic }} mt-1 w-full text-2xl font-semibold">
+      </label>
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <label class="block">
-          <span class="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Name</span>
-          <input type="text" name="name" required value="{{ model.name }}"
-                 class="{{ ic }} mt-1 w-full text-2xl font-semibold">
-        </label>
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <label class="block">
-            <span class="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Source type</span>
-            <input type="text" name="source_type" value="{{ model.source_type or '' }}"
-                   placeholder="thingiverse, printables, github, local…"
-                   class="{{ ic }} mt-1 w-full">
-          </label>
-          <label class="block">
-            <span class="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Source URL</span>
-            <input type="url" name="source_url" value="{{ model.source_url or '' }}"
-                   placeholder="https://…"
-                   class="{{ ic }} mt-1 w-full">
-          </label>
-        </div>
-        <label class="block">
-          <span class="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Tags</span>
-          <input type="text" name="tags" value="{{ tags_str }}"
-                 placeholder="comma-separated, e.g. voron, mods, supports"
+          <span class="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Source type</span>
+          <input type="text" name="source_type" value="{{ model.source_type or '' }}"
+                 placeholder="thingiverse, printables, github, local…"
                  class="{{ ic }} mt-1 w-full">
         </label>
         <label class="block">
-          <span class="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Description</span>
-          <textarea name="description" rows="3" class="{{ ic }} mt-1 w-full">{{ description or '' }}</textarea>
-          <span class="mt-1 block text-xs text-slate-400">Markdown — saved to the model's README.md on disk.</span>
+          <span class="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Source URL</span>
+          <input type="url" name="source_url" value="{{ model.source_url or '' }}"
+                 placeholder="https://…"
+                 class="{{ ic }} mt-1 w-full">
         </label>
-        <label class="block">
-          <span class="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Notes</span>
-          <textarea name="notes" rows="2" class="{{ ic }} mt-1 w-full">{{ model.notes or '' }}</textarea>
-        </label>
-      </form>
+      </div>
+      <label class="block">
+        <span class="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Tags</span>
+        <input type="text" name="tags" value="{{ tags_str }}"
+               placeholder="comma-separated, e.g. voron, mods, supports"
+               class="{{ ic }} mt-1 w-full">
+      </label>
+      <label class="block">
+        <span class="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Description</span>
+        <textarea name="description" rows="3" class="{{ ic }} mt-1 w-full">{{ description or '' }}</textarea>
+        <span class="mt-1 block text-xs text-slate-400">Markdown — saved to the model's README.md on disk.</span>
+      </label>
+      <label class="block">
+        <span class="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Notes</span>
+        <textarea name="notes" rows="2" class="{{ ic }} mt-1 w-full">{{ model.notes or '' }}</textarea>
+      </label>
+    </div>
 
-      <form id="model-delete-form" method="post" action="/models/{{ model.id }}/delete"
-            onsubmit="return confirm('Delete this model? Asset files on disk will be cleaned up too.');"
-            class="hidden"></form>
-    {% else %}
-      <h1 class="text-3xl font-semibold text-slate-900 dark:text-white">{{ model.name }}</h1>
-      {% if model.source_type or model.source_url %}
-        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          {% if model.source_type %}{{ model.source_type }}{% endif %}
-          {% if model.source_url %}
-            · <a href="{{ model.source_url }}" target="_blank" rel="noopener" class="text-crimson hover:text-crimson dark:text-crimson">open source ↗</a>
-          {% endif %}
-        </p>
-      {% endif %}
-      {% if tags %}
-        <div class="mt-2 flex flex-wrap gap-1">
-          {% for tag in tags %}
-            <span class="rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800 dark:bg-emerald-900/40 dark:text-crimson">{{ tag }}</span>
-          {% endfor %}
-        </div>
-      {% endif %}
-      {% if description_html %}
-        <div class="prose prose-sm mt-4 max-w-none text-slate-700 dark:prose-invert dark:text-slate-300">{{ description_html | safe }}</div>
-      {% endif %}
-      {% if model.notes %}
-        <div class="mt-4">
-          <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-500">Notes</h2>
-          <p class="mt-1 whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-400">{{ model.notes }}</p>
-        </div>
-      {% endif %}
+    {# ── right column: save / delete + unsaved hint ───────────────────── #}
+    <div class="space-y-3">
+      <div class="flex flex-wrap justify-end gap-2">
+        {% if not is_new %}
+          <button type="submit" form="model-delete-form" class="{{ btn_outline_danger }}">Delete model</button>
+        {% endif %}
+        <button type="submit" class="{{ btn_active }}">Save</button>
+      </div>
+      <p class="text-right text-xs text-slate-400" x-show="dirty" x-cloak>Unsaved changes</p>
+    </div>
+  </div>
+
+  {# ── files: existing assets (deletable) + staged uploads ───────────── #}
+  <section class="mt-8 rounded-lg border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+    <div class="mb-4 flex items-center justify-between">
+      <h2 class="text-lg font-semibold text-slate-900 dark:text-white">Files</h2>
+      <div>
+        <input type="file" name="files" multiple x-ref="fileInput" class="hidden"
+               accept=".stl,.step,.stp,.3mf,.gcode,.g,.gco,.png,.jpg,.jpeg,.webp,.gif"
+               @change="addPicked($event)">
+        <button type="button" @click="$refs.fileInput.click()"
+                class="rounded-md bg-crimson px-3 py-1.5 text-sm font-medium text-white hover:bg-crimson">+ Add files</button>
+      </div>
+    </div>
+    <p class="mb-3 text-xs text-slate-500">STL/STEP/3MF/G-code/images · 200 MB each. Files upload when you hit Save. 3MF thumbnails extract automatically.</p>
+
+    {# existing, committed assets #}
+    {% if assets %}
+      <ul class="divide-y divide-slate-200 text-sm dark:divide-slate-800">
+        {% for a in assets %}
+          <li class="flex items-center justify-between py-3" :class="deleted[{{ a.id }}] && 'opacity-50'">
+            <div class="flex min-w-0 items-center gap-3">
+              <span class="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs uppercase text-slate-700 dark:bg-slate-800 dark:text-slate-300">{{ a.asset_type }}</span>
+              {% if a.generated %}
+                <span class="rounded bg-sky-100 px-2 py-0.5 text-xs text-sky-800 dark:bg-sky-900/40 dark:text-sky-300">auto</span>
+              {% endif %}
+              <span class="truncate text-slate-700 dark:text-slate-300" :class="deleted[{{ a.id }}] && 'line-through'">{{ a.filename }}</span>
+              {% if a.file_size %}<span class="text-xs text-slate-500 tabular-nums">{{ '%.1f'|format(a.file_size / 1024 / 1024) }} MB</span>{% endif %}
+            </div>
+            <div class="flex items-center gap-3">
+              {% if a.asset_type == 'image' %}
+                <label class="flex items-center gap-1 text-xs text-slate-500">
+                  <input type="radio" name="__thumb" value="{{ a.filename }}"
+                         :checked="thumbnail === '{{ a.filename }}'"
+                         :disabled="deleted[{{ a.id }}]"
+                         @change="thumbnail = '{{ a.filename }}'; dirty = true">
+                  thumbnail
+                </label>
+              {% endif %}
+              <a href="/assets/{{ a.id }}/download" class="text-xs text-slate-600 hover:text-crimson dark:text-slate-400 dark:hover:text-crimson">Download</a>
+              <button type="button" class="text-xs text-rose-600 hover:text-rose-500 dark:text-rose-400"
+                      @click="toggleDelete({{ a.id }}, '{{ a.filename }}')"
+                      x-text="deleted[{{ a.id }}] ? 'undo' : 'remove'">remove</button>
+              <template x-if="deleted[{{ a.id }}]">
+                <input type="hidden" name="delete_asset_ids" value="{{ a.id }}">
+              </template>
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    {# staged (not-yet-uploaded) files #}
+    <ul class="mt-2 divide-y divide-slate-200 text-sm dark:divide-slate-800" x-show="staged.length" x-cloak>
+      <template x-for="(f, i) in staged" :key="f.key">
+        <li class="flex items-center justify-between py-3">
+          <div class="flex min-w-0 items-center gap-3">
+            <span class="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">staged</span>
+            <span class="truncate text-slate-700 dark:text-slate-300" x-text="f.name"></span>
+            <span class="text-xs text-slate-500 tabular-nums" x-text="fmtSize(f.size)"></span>
+          </div>
+          <button type="button" class="text-xs text-rose-600 hover:text-rose-500 dark:text-rose-400"
+                  @click="removeStaged(i)">✕</button>
+        </li>
+      </template>
+    </ul>
+
+    {% if not assets %}
+      <p class="py-6 text-center text-sm text-slate-500" x-show="!staged.length">
+        No files yet — add STL / 3MF / images above.
+      </p>
+    {% endif %}
+
+    {# single hidden input carries the chosen thumbnail filename to the server #}
+    <input type="hidden" name="thumbnail" :value="thumbnail">
+  </section>
+</form>
+
+{% if not is_new %}
+  <form id="model-delete-form" method="post" action="/models/{{ model.id }}/delete"
+        onsubmit="return confirm('Delete this model? Its folder and files on disk are removed too.');"
+        class="hidden"></form>
+{% endif %}
+
+<script>
+  function modelEditor(opts) {
+    return {
+      dirty: false,
+      submitting: false,
+      staged: [],
+      deleted: {},
+      thumbnail: opts.thumbnail || '',
+      _dt: new DataTransfer(),
+      init() {
+        window.addEventListener('beforeunload', (e) => {
+          if (this.dirty && !this.submitting) { e.preventDefault(); e.returnValue = ''; }
+        });
+      },
+      _syncStaged() {
+        const out = [];
+        for (let i = 0; i < this._dt.files.length; i++) {
+          const f = this._dt.files[i];
+          out.push({ name: f.name, size: f.size, key: f.name + ':' + f.size + ':' + f.lastModified });
+        }
+        this.staged = out;
+        this.$refs.fileInput.files = this._dt.files;
+      },
+      addPicked(ev) {
+        for (const f of ev.target.files) this._dt.items.add(f);
+        this._syncStaged();
+        this.dirty = true;
+      },
+      removeStaged(i) {
+        const next = new DataTransfer();
+        for (let j = 0; j < this._dt.files.length; j++) {
+          if (j !== i) next.items.add(this._dt.files[j]);
+        }
+        this._dt = next;
+        this._syncStaged();
+        this.dirty = true;
+      },
+      toggleDelete(id, filename) {
+        this.deleted[id] = !this.deleted[id];
+        if (this.deleted[id] && this.thumbnail === filename) this.thumbnail = '';
+        this.dirty = true;
+      },
+      fmtSize(bytes) { return (bytes / 1024 / 1024).toFixed(1) + ' MB'; },
+    };
+  }
+</script>
+
+{% else %}
+{# ── Read mode ─────────────────────────────────────────────────────────── #}
+<div class="mt-3 grid grid-cols-1 gap-6 lg:grid-cols-2">
+  <div class="min-w-0">
+    <h1 class="text-3xl font-semibold text-slate-900 dark:text-white">{{ model.name }}</h1>
+    {% if model.source_type or model.source_url %}
+      <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+        {% if model.source_type %}{{ model.source_type }}{% endif %}
+        {% if model.source_url %}
+          · <a href="{{ model.source_url }}" target="_blank" rel="noopener" class="text-crimson hover:text-crimson dark:text-crimson">open source ↗</a>
+        {% endif %}
+      </p>
+    {% endif %}
+    {% if tags %}
+      <div class="mt-2 flex flex-wrap gap-1">
+        {% for tag in tags %}
+          <span class="rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800 dark:bg-emerald-900/40 dark:text-crimson">{{ tag }}</span>
+        {% endfor %}
+      </div>
+    {% endif %}
+    {% if description_html %}
+      <div class="prose prose-sm mt-4 max-w-none text-slate-700 dark:prose-invert dark:text-slate-300">{{ description_html | safe }}</div>
+    {% endif %}
+    {% if model.notes %}
+      <div class="mt-4">
+        <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-500">Notes</h2>
+        <p class="mt-1 whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-400">{{ model.notes }}</p>
+      </div>
     {% endif %}
   </div>
 
-  {# ── right column: action buttons + preview ───────────────────────── #}
   <div class="space-y-3">
     <div class="flex flex-wrap justify-end gap-2">
-      {% if edit_mode %}
-        <button type="submit" form="model-delete-form" class="{{ btn_outline_danger }}">Delete model</button>
-        <button type="submit" form="model-basic-form" class="{{ btn_active }}">Done editing</button>
-      {% else %}
-        <a href="/models/{{ model.id }}?edit=true" class="{{ btn_outline }}">Edit page</a>
-      {% endif %}
+      <a href="/models/{{ model.id }}?edit=true" class="{{ btn_outline }}">Edit page</a>
     </div>
 
     <div class="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
@@ -108,9 +252,6 @@
         <p class="mt-2 text-xs text-slate-500">
           Showing <span class="font-mono">{{ first_stl.filename }}</span>{% if stl_assets|length > 1 %} ({{ stl_assets|length - 1 }} more STL not shown){% endif %} · drag to orbit, scroll to zoom.
         </p>
-        {# Lazy-loaded only on this detail page when an STL exists. The
-           importmap lets the addon files resolve their bare 'three' and
-           'three/addons/' specifiers against our vendored copies. #}
         <script type="importmap">
         {
           "imports": {
@@ -126,45 +267,20 @@
         <p class="mt-2 text-xs text-slate-500">No STL uploaded yet — showing the embedded thumbnail.</p>
       {% else %}
         <div class="flex aspect-square w-full items-center justify-center rounded bg-slate-100 text-sm text-slate-500 dark:bg-slate-950">
-          Upload an STL or 3MF to see a preview.
+          No preview — add an STL or 3MF.
         </div>
       {% endif %}
     </div>
   </div>
 </div>
 
-{% if upload_errors %}
-  <div class="mt-6 rounded border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-700 dark:bg-rose-950/40 dark:text-rose-200">
-    <ul class="list-disc pl-5">{% for err in upload_errors %}<li>{{ err }}</li>{% endfor %}</ul>
-  </div>
-{% endif %}
-
 <section class="mt-8 rounded-lg border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
-  <div class="mb-4 flex items-end justify-between">
-    <h2 class="text-lg font-semibold text-slate-900 dark:text-white">Assets ({{ assets|length }})</h2>
-  </div>
-
-  {% if edit_mode %}
-    <form method="post"
-          action="/models/{{ model.id }}/assets"
-          enctype="multipart/form-data"
-          class="mb-6 flex flex-wrap items-center gap-3 rounded border border-dashed border-slate-300 p-4 dark:border-slate-700">
-      <input type="file" name="files" multiple
-             accept=".stl,.step,.stp,.3mf,.gcode,.g,.gco,.png,.jpg,.jpeg,.webp,.gif"
-             class="text-sm text-slate-700 file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-slate-200 dark:text-slate-300 dark:file:bg-slate-800 dark:hover:file:bg-slate-700">
-      <button type="submit"
-              class="rounded-md bg-crimson px-4 py-2 text-sm font-medium text-white hover:bg-crimson">
-        Upload
-      </button>
-      <span class="text-xs text-slate-500">STL/STEP/3MF/G-code/images · 200 MB each. 3MF thumbnails extract automatically.</span>
-    </form>
-  {% endif %}
-
+  <h2 class="mb-4 text-lg font-semibold text-slate-900 dark:text-white">Assets ({{ assets|length }})</h2>
   {% if assets %}
     <ul class="divide-y divide-slate-200 text-sm dark:divide-slate-800">
       {% for a in assets %}
         <li class="flex items-center justify-between py-3">
-          <div class="flex items-center gap-3 min-w-0">
+          <div class="flex min-w-0 items-center gap-3">
             <span class="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs uppercase text-slate-700 dark:bg-slate-800 dark:text-slate-300">{{ a.asset_type }}</span>
             {% if a.asset_type == 'image' and a.filename == model.thumbnail_filename %}
               <span class="rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800 dark:bg-emerald-900/40 dark:text-crimson">thumbnail</span>
@@ -173,23 +289,9 @@
               <span class="rounded bg-sky-100 px-2 py-0.5 text-xs text-sky-800 dark:bg-sky-900/40 dark:text-sky-300">auto</span>
             {% endif %}
             <span class="truncate text-slate-700 dark:text-slate-300">{{ a.filename }}</span>
-            {% if a.file_size %}
-              <span class="text-xs text-slate-500 tabular-nums">{{ '%.1f'|format(a.file_size / 1024 / 1024) }} MB</span>
-            {% endif %}
+            {% if a.file_size %}<span class="text-xs text-slate-500 tabular-nums">{{ '%.1f'|format(a.file_size / 1024 / 1024) }} MB</span>{% endif %}
           </div>
-          <div class="flex items-center gap-2">
-            <a href="/assets/{{ a.id }}/download" class="text-xs text-slate-600 hover:text-crimson dark:text-slate-400 dark:hover:text-crimson">Download</a>
-            {% if edit_mode %}
-              {% if a.asset_type == 'image' and a.filename != model.thumbnail_filename %}
-                <form method="post" action="/models/{{ model.id }}/thumbnail/{{ a.id }}" class="inline">
-                  <button class="text-xs text-crimson hover:text-crimson dark:text-crimson">Set as thumbnail</button>
-                </form>
-              {% endif %}
-              <form method="post" action="/assets/{{ a.id }}/delete" class="inline">
-                <button class="text-xs text-rose-600 hover:text-rose-500 dark:text-rose-400">Delete</button>
-              </form>
-            {% endif %}
-          </div>
+          <a href="/assets/{{ a.id }}/download" class="text-xs text-slate-600 hover:text-crimson dark:text-slate-400 dark:hover:text-crimson">Download</a>
         </li>
       {% endfor %}
     </ul>
@@ -197,4 +299,5 @@
     <p class="py-6 text-center text-sm text-slate-500">No assets uploaded yet.</p>
   {% endif %}
 </section>
+{% endif %}
 {% endblock %}

@@ -1,12 +1,14 @@
+import contextlib
 from typing import Annotated
 
 import mistune
-from fastapi import APIRouter, Depends, File, Request, UploadFile, status
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from maketrack.db import get_session
+from maketrack.errors import NotFoundError
 from maketrack.routes.ui._forms import (
     format_validation_error,
     null_empty_strings,
@@ -21,10 +23,6 @@ from maketrack.templating import templates
 
 router = APIRouter(tags=["ui-models"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
-
-# Placeholder name for stubs created by the "+ New model" button. The
-# user lands on the detail page in edit mode and is expected to rename.
-DRAFT_MODEL_NAME = "New model"
 
 
 def _parse_tags(raw: str | None) -> list[str]:
@@ -129,41 +127,46 @@ async def save_preferences(request: Request) -> HTMLResponse:
     return response
 
 
-@router.post("/models/new", response_class=HTMLResponse)
-async def create_draft(session: SessionDep) -> HTMLResponse:
-    """Create a stub model and drop the user on its detail page in edit
-    mode. Replaces the standalone create-model form."""
-    model = await svc.create_model(session, ModelCreate(name=DRAFT_MODEL_NAME))
-    await session.commit()
-    return RedirectResponse(
-        url=f"/models/{model.id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
-    )
-
-
 async def _render_detail(
     request: Request,
     session: AsyncSession,
-    model_id: int,
+    model_id: int | None,
     *,
     edit_mode: bool,
     errors: list[str] | None = None,
-    upload_errors: list[str] | None = None,
     tags_override: list[str] | None = None,
+    description_override: str | None = None,
     status_code: int = status.HTTP_200_OK,
 ) -> HTMLResponse:
-    model = await svc.get_model(session, model_id)
-    assets = await svc.list_assets(session, model_id)
-    thumb_path = None
-    if model.thumbnail_filename:
-        thumb_path = f"{model.folder_name}/photos/{model.thumbnail_filename}"
-    stl_assets = [a for a in assets if a.asset_type == "stl"]
-    tags = tags_override if tags_override is not None else svc.decode_tags(model.tags)
-    description = svc.read_description(model)
+    """Render the model detail page. `model_id=None` renders the create
+    form (a blank draft that persists nothing until the user hits Save)."""
+    is_new = model_id is None
+    if is_new:
+        model = None
+        assets: list = []
+        tags = tags_override or []
+        description = description_override
+        thumb_path = None
+        stl_assets: list = []
+    else:
+        model = await svc.get_model(session, model_id)
+        assets = list(await svc.list_assets(session, model_id))
+        thumb_path = None
+        if model.thumbnail_filename:
+            thumb_path = f"{model.folder_name}/photos/{model.thumbnail_filename}"
+        stl_assets = [a for a in assets if a.asset_type == "stl"]
+        tags = tags_override if tags_override is not None else svc.decode_tags(model.tags)
+        description = (
+            description_override
+            if description_override is not None
+            else svc.read_description(model)
+        )
     return templates.TemplateResponse(
         request,
         "models/detail.html",
         {
             "model": model,
+            "is_new": is_new,
             "tags": tags,
             "tags_str": ", ".join(tags),
             "description": description,
@@ -174,10 +177,16 @@ async def _render_detail(
             "first_stl": stl_assets[0] if stl_assets else None,
             "edit_mode": edit_mode,
             "errors": errors,
-            "upload_errors": upload_errors,
         },
         status_code=status_code,
     )
+
+
+@router.get("/models/new", response_class=HTMLResponse)
+async def new_page(request: Request, session: SessionDep) -> HTMLResponse:
+    """Blank create form. Nothing is written to disk or the DB until Save —
+    so abandoning the form leaves no orphan folder behind."""
+    return await _render_detail(request, session, None, edit_mode=True)
 
 
 @router.get("/models/{model_id}", response_class=HTMLResponse)
@@ -190,23 +199,119 @@ async def detail_page(
     return await _render_detail(request, session, model_id, edit_mode=edit)
 
 
+def _read_save_form(form) -> dict:
+    """Pull the fields/files/marks out of a multipart Save submission."""
+    new_files = [
+        f for f in form.getlist("files") if getattr(f, "filename", None) and f.filename.strip()
+    ]
+    delete_ids = [
+        int(x) for x in form.getlist("delete_asset_ids") if str(x).strip().lstrip("-").isdigit()
+    ]
+    thumbnail = (form.get("thumbnail") or "").strip() or None
+    return {"new_files": new_files, "delete_ids": delete_ids, "thumbnail": thumbnail}
+
+
+async def _apply_assets(
+    session: AsyncSession,
+    model_id: int,
+    *,
+    new_files: list,
+    delete_ids: list[int],
+    thumbnail: str | None,
+) -> tuple[list[str], list[str]]:
+    """Apply staged asset changes for one Save. Returns (upload_errors,
+    removed_disk_paths). Disk deletes are returned for the caller to run
+    after commit."""
+    upload_errors: list[str] = []
+    removed_paths: list[str] = []
+    for aid in delete_ids:
+        with contextlib.suppress(NotFoundError):
+            removed_paths.append(await asset_svc.delete_asset(session, aid))
+    for file in new_files:
+        try:
+            await asset_svc.upload_asset(session, model_id, file, set_as_thumbnail=False)
+        except UploadError as exc:
+            upload_errors.append(f"{file.filename}: {exc}")
+    if thumbnail:
+        assets = await asset_svc.list_for_model(session, model_id)
+        match = next(
+            (a for a in assets if a.filename == thumbnail and a.asset_type == "image"), None
+        )
+        if match is not None:
+            await asset_svc.set_thumbnail(session, model_id, match.id)
+    return upload_errors, removed_paths
+
+
+@router.post("/models", response_class=HTMLResponse)
+async def create(request: Request, session: SessionDep) -> HTMLResponse:
+    """Commit a brand-new model from the create form: write the folder +
+    README, upload the staged files, set the chosen thumbnail — all at once."""
+    form = await request.form()
+    raw = null_empty_strings(
+        {k: form.get(k) for k in ("name", "source_type", "source_url", "notes", "description")}
+    )
+    tags = _parse_tags(form.get("tags"))
+    if not (raw.get("name") or "").strip():
+        return await _render_detail(
+            request,
+            session,
+            None,
+            edit_mode=True,
+            errors=["Name is required."],
+            tags_override=tags,
+            description_override=raw.get("description"),
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        payload = ModelCreate(**raw, tags=tags)
+    except ValidationError as exc:
+        return await _render_detail(
+            request,
+            session,
+            None,
+            edit_mode=True,
+            errors=[format_validation_error(e) for e in exc.errors()],
+            tags_override=tags,
+            description_override=raw.get("description"),
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    staged = _read_save_form(form)
+    model = await svc.create_model(session, payload)
+    await _apply_assets(
+        session,
+        model.id,
+        new_files=staged["new_files"],
+        delete_ids=[],
+        thumbnail=staged["thumbnail"],
+    )
+    await session.commit()
+    return RedirectResponse(url=f"/models/{model.id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
 @router.post("/models/{model_id}", response_class=HTMLResponse)
 async def update(model_id: int, request: Request, session: SessionDep) -> HTMLResponse:
-    raw_form = dict(await request.form())
-    if not (raw_form.get("name") or "").strip():
+    """Commit a full-draft edit: field changes, new uploads, asset deletions,
+    and the thumbnail choice are applied atomically when the user hits Save."""
+    await svc.get_model(session, model_id)  # 404 if missing
+    form = await request.form()
+    raw = null_empty_strings(
+        {k: form.get(k) for k in ("name", "source_type", "source_url", "notes", "description")}
+    )
+    tags = _parse_tags(form.get("tags"))
+    if not (raw.get("name") or "").strip():
         return await _render_detail(
             request,
             session,
             model_id,
             edit_mode=True,
             errors=["Name is required."],
+            tags_override=tags,
+            description_override=raw.get("description"),
             status_code=status.HTTP_400_BAD_REQUEST,
         )
-
-    form = null_empty_strings(raw_form)
-    tags = _parse_tags(form.pop("tags", None))
     try:
-        payload = ModelUpdate(**form, tags=tags)
+        payload = ModelUpdate(**raw, tags=tags)
     except ValidationError as exc:
         return await _render_detail(
             request,
@@ -215,11 +320,24 @@ async def update(model_id: int, request: Request, session: SessionDep) -> HTMLRe
             edit_mode=True,
             errors=[format_validation_error(e) for e in exc.errors()],
             tags_override=tags,
+            description_override=raw.get("description"),
             status_code=status.HTTP_400_BAD_REQUEST,
         )
+
+    staged = _read_save_form(form)
+    _, removed_paths = await _apply_assets(
+        session,
+        model_id,
+        new_files=staged["new_files"],
+        delete_ids=staged["delete_ids"],
+        thumbnail=staged["thumbnail"],
+    )
+    # update_model runs last so the README reflects the final thumbnail + fields.
     await svc.update_model(session, model_id, payload)
     await session.commit()
-    # "Done editing" submits this form — exit to read mode.
+    for path in removed_paths:
+        delete_model_file(path)
+    # Save exits edit mode.
     return RedirectResponse(url=f"/models/{model_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -229,62 +347,3 @@ async def delete(model_id: int, session: SessionDep) -> HTMLResponse:
     await session.commit()
     delete_model_folder(folder_name)
     return RedirectResponse(url="/models", status_code=status.HTTP_303_SEE_OTHER)
-
-
-@router.post("/models/{model_id}/assets", response_class=HTMLResponse)
-async def upload(
-    model_id: int,
-    request: Request,
-    session: SessionDep,
-    files: Annotated[list[UploadFile], File()],
-) -> HTMLResponse:
-    errors: list[str] = []
-    saved = 0
-    for file in files:
-        if not (file.filename or "").strip():
-            continue
-        try:
-            await asset_svc.upload_asset(session, model_id, file)
-            saved += 1
-        except UploadError as exc:
-            errors.append(f"{file.filename}: {exc}")
-    if saved:
-        await session.commit()
-    if errors:
-        return await _render_detail(
-            request,
-            session,
-            model_id,
-            edit_mode=True,
-            upload_errors=errors,
-            status_code=status.HTTP_400_BAD_REQUEST,
-        )
-    return RedirectResponse(
-        url=f"/models/{model_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
-    )
-
-
-@router.post("/models/{model_id}/thumbnail/{asset_id}", response_class=HTMLResponse)
-async def set_thumbnail(model_id: int, asset_id: int, session: SessionDep) -> HTMLResponse:
-    try:
-        await asset_svc.set_thumbnail(session, model_id, asset_id)
-    except UploadError:
-        return RedirectResponse(
-            url=f"/models/{model_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
-        )
-    await session.commit()
-    return RedirectResponse(
-        url=f"/models/{model_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
-    )
-
-
-@router.post("/assets/{asset_id}/delete", response_class=HTMLResponse)
-async def delete_asset(asset_id: int, session: SessionDep) -> HTMLResponse:
-    asset = await asset_svc.get_asset(session, asset_id)
-    model_id = asset.model_id
-    file_path = await asset_svc.delete_asset(session, asset_id)
-    await session.commit()
-    delete_model_file(file_path)
-    return RedirectResponse(
-        url=f"/models/{model_id}?edit=true", status_code=status.HTTP_303_SEE_OTHER
-    )

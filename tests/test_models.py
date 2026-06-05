@@ -1,7 +1,13 @@
+import io
+
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from maketrack.services.models import decode_tags
+
+
+def _stl_bytes() -> bytes:
+    return b"\x00" * 80 + (0).to_bytes(4, "little")
 
 
 async def test_create_model(client: AsyncClient) -> None:
@@ -67,21 +73,46 @@ async def test_models_list_renders(client: AsyncClient) -> None:
     assert "Visible Model" in resp.text
 
 
-async def test_new_model_button_creates_draft_in_edit_mode(client: AsyncClient) -> None:
-    """Mirror of the printer flow — '+ New model' POSTs to /models/new,
-    creates a stub named 'New model', and drops the user on the detail
-    page in edit mode."""
-    resp = await client.post("/models/new", follow_redirects=False)
-    assert resp.status_code == 303
+async def test_new_model_page_is_blank_draft(client: AsyncClient) -> None:
+    """'+ New model' is now a GET to a blank create form. Nothing is
+    persisted until Save — no draft folder/row is created up front."""
+    resp = await client.get("/models/new")
+    assert resp.status_code == 200
+    # Blank name field + Save button, no Delete (nothing exists yet).
+    assert 'name="name"' in resp.text
+    assert "Save" in resp.text
+    assert "Delete model" not in resp.text
+    # Visiting the form created nothing.
+    assert (await client.get("/api/models")).json() == []
+
+
+async def test_create_via_save_commits_model_and_files(client: AsyncClient) -> None:
+    """Saving the create form writes the model + uploads staged files in one
+    multipart POST to /models."""
+    resp = await client.post(
+        "/models",
+        data={"name": "Voron Filter Mount", "source_type": "printables", "tags": "voron, filter"},
+        files={"files": ("part.stl", io.BytesIO(_stl_bytes()), "model/stl")},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303, resp.text
     location = resp.headers["location"]
     assert location.startswith("/models/")
-    assert location.endswith("?edit=true")
+    assert not location.endswith("?edit=true")  # lands in read mode
 
-    detail = await client.get(location)
-    assert detail.status_code == 200
-    assert 'value="New model"' in detail.text
-    assert "Done editing" in detail.text
-    assert "Delete model" in detail.text
+    mid = int(location.rstrip("/").split("/")[-1])
+    body = (await client.get(f"/api/models/{mid}")).json()
+    assert body["name"] == "Voron Filter Mount"
+    assert body["tags"] == ["voron", "filter"]
+    assets = (await client.get(f"/api/models/{mid}/assets")).json()
+    assert [a["filename"] for a in assets] == ["part.stl"]
+
+
+async def test_create_requires_name(client: AsyncClient) -> None:
+    resp = await client.post("/models", data={"name": ""}, follow_redirects=False)
+    assert resp.status_code == 400
+    assert "Name is required" in resp.text
+    assert (await client.get("/api/models")).json() == []
 
 
 async def test_model_detail_read_mode_hides_edit_affordances(client: AsyncClient) -> None:
@@ -89,29 +120,30 @@ async def test_model_detail_read_mode_hides_edit_affordances(client: AsyncClient
     mid = create.json()["id"]
 
     read = await client.get(f"/models/{mid}")
-    # No basic-field inputs, no upload form in read mode.
+    # No basic-field inputs / editor form in read mode.
     assert 'name="name"' not in read.text
-    assert f'action="/models/{mid}/assets"' not in read.text
+    assert 'id="model-editor"' not in read.text
     # Edit toggle present.
     assert "Edit page" in read.text
 
 
-async def test_model_detail_edit_mode_reveals_forms(client: AsyncClient) -> None:
+async def test_model_detail_edit_mode_reveals_editor(client: AsyncClient) -> None:
     create = await client.post("/api/models", json={"name": "Editable"})
     mid = create.json()["id"]
 
     edit = await client.get(f"/models/{mid}?edit=true")
-    # Basic-field inputs render.
+    # Basic-field inputs render inside the single editor form posting to the model.
     assert 'value="Editable"' in edit.text
-    assert "Done editing" in edit.text
+    assert "Save" in edit.text
     assert "Delete model" in edit.text
-    # Asset upload form is back in edit mode.
-    assert f'action="/models/{mid}/assets"' in edit.text
+    assert f'action="/models/{mid}"' in edit.text
+    # Staged-file UI (Add files) replaces the old immediate upload form.
+    assert "+ Add files" in edit.text
 
 
-async def test_done_editing_saves_and_exits(client: AsyncClient) -> None:
-    create = await client.post("/models/new", follow_redirects=False)
-    mid = int(create.headers["location"].split("/")[2].split("?")[0])
+async def test_save_updates_existing_model_and_exits(client: AsyncClient) -> None:
+    create = await client.post("/api/models", json={"name": "Original"})
+    mid = create.json()["id"]
 
     save = await client.post(
         f"/models/{mid}",
@@ -134,11 +166,14 @@ async def test_done_editing_saves_and_exits(client: AsyncClient) -> None:
     assert body["name"] == "Voron Filter Mount"
     assert body["source_type"] == "printables"
     assert body["tags"] == ["voron", "filter"]
+    assert body["description"] == "Mount for the Nevermore filter"
 
 
-async def test_old_model_form_routes_are_gone(client: AsyncClient) -> None:
-    assert (await client.get("/models/new")).status_code in (404, 422)
+async def test_model_form_routing(client: AsyncClient) -> None:
+    # /models/new is now the blank create form (GET), not a draft-creating POST.
+    assert (await client.get("/models/new")).status_code == 200
 
-    create = await client.post("/models/new", follow_redirects=False)
-    mid = int(create.headers["location"].split("/")[2].split("?")[0])
+    create = await client.post("/api/models", json={"name": "X"})
+    mid = create.json()["id"]
+    # No separate /edit route — edit is the ?edit=true toggle on the detail page.
     assert (await client.get(f"/models/{mid}/edit")).status_code == 404

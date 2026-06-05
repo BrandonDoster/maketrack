@@ -5,6 +5,17 @@ All notable changes to this project will be documented here. Format roughly foll
 ## [Unreleased]
 
 ### Changed
+- **Deferred model create/edit.** `+ New model` is now a blank form (`GET
+  /models/new`); nothing is written to disk or the DB until **Save**, so
+  abandoning the form no longer leaves orphan `new-model-#` folders. The model
+  edit page is a single client-side draft: field edits, staged file uploads,
+  asset deletions, and the thumbnail choice all commit atomically on Save, with
+  a navigate-away guard for unsaved changes. Files are staged in a removable
+  list and uploaded on Save (no per-file upload button).
+- **Removed model-creation from the project page.** The "drop files → auto-
+  create one model per file" flow grouped files wrong (one model per file).
+  Models are created and grouped only in the Models section now; projects link
+  existing files via the picker. (`POST /projects/{id}/upload-files` is gone.)
 - **Filesystem-first model storage.** Models are now folders on disk under
   `MAKETRACK_MODELS_PATH` (default `/maketrack-models`): a `README.md` with
   YAML frontmatter + a markdown-body description, plus `photos/` and

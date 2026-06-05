@@ -99,42 +99,21 @@ async def test_shopping_list_includes_unlinked_rows(client: AsyncClient) -> None
     assert mystery["still_to_buy"] == 12
 
 
-# ── project file upload ────────────────────────────────────────────────────
+# ── project file upload removed ─────────────────────────────────────────────
+# Models are created/grouped only in the Models section now; the project page
+# links existing files via the picker rather than auto-creating one model per
+# dropped file. The old POST /projects/{id}/upload-files route is gone.
 
 
-async def test_project_file_upload_creates_models_and_links(
-    client: AsyncClient,
-) -> None:
-    project = await client.post("/api/projects", json={"name": "Voron"})
-    pid = project.json()["id"]
-
-    resp = await client.post(
-        f"/projects/{pid}/upload-files",
-        files=[
-            ("files", ("bracket.stl", io.BytesIO(_stl_bytes()), "model/stl")),
-            ("files", ("nut_holder.stl", io.BytesIO(_stl_bytes()), "model/stl")),
-        ],
-        follow_redirects=False,
-    )
-    assert resp.status_code == 303
-
-    models_in_project = (await client.get(f"/api/projects/{pid}/models")).json()
-    assert len(models_in_project) == 2
-    names = sorted(m["model_name"] for m in models_in_project)
-    assert names == ["bracket", "nut_holder"]
-
-
-async def test_project_file_upload_skips_image_files(client: AsyncClient) -> None:
+async def test_project_upload_files_route_is_gone(client: AsyncClient) -> None:
     project = await client.post("/api/projects", json={"name": "P"})
     pid = project.json()["id"]
     resp = await client.post(
         f"/projects/{pid}/upload-files",
-        files=[("files", ("ignore_me.png", io.BytesIO(_PNG), "image/png"))],
+        files=[("files", ("bracket.stl", io.BytesIO(_stl_bytes()), "model/stl"))],
         follow_redirects=False,
     )
-    assert resp.status_code == 303
-    # Image files don't become models on this endpoint — that's the photo flow.
-    assert (await client.get(f"/api/projects/{pid}/models")).json() == []
+    assert resp.status_code in (404, 405)
 
 
 # ── project photos ─────────────────────────────────────────────────────────
