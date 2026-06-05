@@ -20,6 +20,8 @@ dependencies = [
     "structlog>=24.4",
     "apscheduler>=3.11",
     "mcp>=1.27.1",
+    "python-frontmatter>=1.1",
+    "mistune>=3.0",
 ]
 
 [project.urls]

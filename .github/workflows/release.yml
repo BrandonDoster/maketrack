@@ -63,7 +63,7 @@ jobs:
 
       - name: Upload Trivy SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-results.sarif
           category: trivy-image
@@ -75,7 +75,6 @@ jobs:
           severity: CRITICAL
           ignore-unfixed: true
           exit-code: "1"
-          skip-db-update: true
 
       - name: Build and push
         uses: docker/build-push-action@v7

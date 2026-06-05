@@ -32,8 +32,8 @@ class ProjectModel(Base, TimestampMixin):
         ForeignKey("projects.id", ondelete="CASCADE"),
         primary_key=True,
     )
-    model_id: Mapped[int] = mapped_column(
-        ForeignKey("models.id", ondelete="RESTRICT"),
+    model_asset_id: Mapped[int] = mapped_column(
+        ForeignKey("model_assets.id", ondelete="RESTRICT"),
         primary_key=True,
     )
     qty_to_print: Mapped[int] = mapped_column(default=1)

@@ -1,4 +1,3 @@
-from collections.abc import Sequence
 from dataclasses import dataclass
 
 from sqlalchemy import select
@@ -28,6 +27,7 @@ from maketrack.schemas.project import (
 @dataclass(slots=True)
 class HydratedProjectModel:
     link: ProjectModel
+    asset: ModelAsset
     model: Model
     thumbnail_path: str | None
 
@@ -61,32 +61,27 @@ class HydratedProjectItem:
 
 
 async def list_project_models(session: AsyncSession, project_id: int) -> list[HydratedProjectModel]:
+    # Join ProjectModel -> ModelAsset -> Model to get all three entities.
     rows = (
         await session.execute(
-            select(ProjectModel, Model)
-            .join(Model, Model.id == ProjectModel.model_id)
+            select(ProjectModel, ModelAsset, Model)
+            .join(ModelAsset, ModelAsset.id == ProjectModel.model_asset_id)
+            .join(Model, Model.id == ModelAsset.model_id)
             .where(ProjectModel.project_id == project_id)
             .order_by(Model.name)
         )
     ).all()
     if not rows:
         return []
-    # Pull thumbnails for whatever subset has them — single query keyed by
-    # the asset id, not per-model lookups.
-    thumb_ids = [m.thumbnail_asset_id for _, m in rows if m.thumbnail_asset_id]
-    paths_by_id: dict[int, str] = {}
-    if thumb_ids:
-        asset_rows = (
-            await session.execute(
-                select(ModelAsset.id, ModelAsset.file_path).where(ModelAsset.id.in_(thumb_ids))
-            )
-        ).all()
-        paths_by_id = {a_id: path for a_id, path in asset_rows}
 
+    # Build thumbnail paths by looking up the model's thumbnail_filename.
     out: list[HydratedProjectModel] = []
-    for link, model in rows:
-        thumb_path = paths_by_id.get(model.thumbnail_asset_id) if model.thumbnail_asset_id else None
-        out.append(HydratedProjectModel(link=link, model=model, thumbnail_path=thumb_path))
+    for link, asset, model in rows:
+        thumb_path: str | None = None
+        if model.thumbnail_filename:
+            # Thumbnail path is folder/photos/filename.
+            thumb_path = f"{model.folder_name}/photos/{model.thumbnail_filename}"
+        out.append(HydratedProjectModel(link=link, asset=asset, model=model, thumbnail_path=thumb_path))
     return out
 
 
@@ -95,9 +90,9 @@ async def add_model(
 ) -> ProjectModel:
     if await session.get(Project, project_id) is None:
         raise NotFoundError("project", project_id)
-    if await session.get(Model, payload.model_id) is None:
-        raise NotFoundError("model", payload.model_id)
-    existing = await session.get(ProjectModel, (project_id, payload.model_id))
+    if await session.get(ModelAsset, payload.model_asset_id) is None:
+        raise NotFoundError("model_asset", payload.model_asset_id)
+    existing = await session.get(ProjectModel, (project_id, payload.model_asset_id))
     if existing is not None:
         # Idempotent re-link: bump qty/status/notes from the new payload
         # rather than failing on the composite PK.
@@ -108,7 +103,7 @@ async def add_model(
         return existing
     link = ProjectModel(
         project_id=project_id,
-        model_id=payload.model_id,
+        model_asset_id=payload.model_asset_id,
         qty_to_print=payload.qty_to_print,
         status=payload.status,
         notes=payload.notes,
@@ -121,22 +116,22 @@ async def add_model(
 async def update_model_link(
     session: AsyncSession,
     project_id: int,
-    model_id: int,
+    model_asset_id: int,
     payload: ProjectModelLinkUpdate,
 ) -> ProjectModel:
-    link = await session.get(ProjectModel, (project_id, model_id))
+    link = await session.get(ProjectModel, (project_id, model_asset_id))
     if link is None:
-        raise NotFoundError("project_model", f"({project_id},{model_id})")
+        raise NotFoundError("project_model", f"({project_id},{model_asset_id})")
     for k, v in payload.model_dump(exclude_unset=True).items():
         setattr(link, k, v)
     await session.flush()
     return link
 
 
-async def remove_model(session: AsyncSession, project_id: int, model_id: int) -> None:
-    link = await session.get(ProjectModel, (project_id, model_id))
+async def remove_model(session: AsyncSession, project_id: int, model_asset_id: int) -> None:
+    link = await session.get(ProjectModel, (project_id, model_asset_id))
     if link is None:
-        raise NotFoundError("project_model", f"({project_id},{model_id})")
+        raise NotFoundError("project_model", f"({project_id},{model_asset_id})")
     await session.delete(link)
     await session.flush()
 
@@ -286,8 +281,40 @@ async def get_printer_for_project(session: AsyncSession, project: Project) -> Pr
     return await session.get(Printer, project.printer_id)
 
 
-async def list_unlinked_models(session: AsyncSession, project_id: int) -> Sequence[Model]:
-    """Models that aren't already attached to this project — for picker UIs."""
-    sub = select(ProjectModel.model_id).where(ProjectModel.project_id == project_id)
-    stmt = select(Model).where(Model.id.notin_(sub)).order_by(Model.name)
-    return (await session.execute(stmt)).scalars().all()
+async def list_unlinked_assets(
+    session: AsyncSession, project_id: int
+) -> list[tuple[Model, list[ModelAsset]]]:
+    """Models with their unlinked assets, for picker UIs.
+
+    Returns a list of (model, [assets]) tuples where assets are not yet
+    linked to the project.
+    """
+    # Get all asset IDs linked to this project.
+    linked_sub = select(ProjectModel.model_asset_id).where(
+        ProjectModel.project_id == project_id
+    )
+    linked_asset_ids = set(
+        (await session.execute(linked_sub)).scalars().all()
+    )
+
+    # Get all models ordered by name.
+    models = (
+        await session.execute(select(Model).order_by(Model.name))
+    ).scalars().all()
+
+    # For each model, get its assets and filter out linked ones.
+    result: list[tuple[Model, list[ModelAsset]]] = []
+    for model in models:
+        assets = (
+            await session.execute(
+                select(ModelAsset)
+                .where(ModelAsset.model_id == model.id)
+                .order_by(ModelAsset.asset_type, ModelAsset.filename)
+            )
+        ).scalars().all()
+
+        unlinked = [a for a in assets if a.id not in linked_asset_ids]
+        if unlinked:
+            result.append((model, unlinked))
+
+    return result

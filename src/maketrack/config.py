@@ -14,6 +14,7 @@ class Settings(BaseSettings):
 
     db_path: Path = Path("/data/maketrack.db")
     uploads_path: Path = Path("/uploads")
+    models_path: Path = Path("/maketrack-models")
     log_level: str = "INFO"
     bind_host: str = "0.0.0.0"
     bind_port: int = 8000

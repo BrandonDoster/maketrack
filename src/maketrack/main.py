@@ -57,7 +57,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     except Exception as exc:
         log.error("maketrack.migrations_failed", error=str(exc))
         raise
-    scheduler = SyncScheduler(get_sessionmaker(), source_factory=build_source)
+    scheduler = SyncScheduler(get_sessionmaker(), settings, source_factory=build_source)
     scheduler.start()
     app.state.scheduler = scheduler
     try:

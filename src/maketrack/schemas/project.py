@@ -56,7 +56,7 @@ class ProjectRead(BaseModel):
 
 
 class ProjectModelLinkCreate(BaseModel):
-    model_id: int
+    model_asset_id: int
     qty_to_print: int = Field(default=1, ge=1)
     status: str = Field(default="pending", pattern=r"^(pending|printed|failed)$")
     notes: str | None = None
@@ -72,12 +72,14 @@ class ProjectModelLinkRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     project_id: int
-    model_id: int
+    model_asset_id: int
     qty_to_print: int
     status: str | None
     notes: str | None
     # Hydrated by the route from joined ORM data so the UI doesn't N+1.
     model_name: str | None = None
+    model_folder_name: str | None = None
+    asset_filename: str | None = None
     model_thumbnail_path: str | None = None
 
 

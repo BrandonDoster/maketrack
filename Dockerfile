@@ -49,6 +49,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     MAKETRACK_DB_PATH=/data/maketrack.db \
     MAKETRACK_UPLOADS_PATH=/uploads \
+    MAKETRACK_MODELS_PATH=/maketrack-models \
     MAKETRACK_BIND_HOST=0.0.0.0 \
     MAKETRACK_BIND_PORT=8000
 
@@ -71,7 +72,7 @@ COPY --from=build /build/src ./src
 COPY pyproject.toml README.md ./
 RUN pip install --no-cache-dir --no-deps .
 
-RUN mkdir -p /data /uploads && chown -R maketrack:maketrack /app /data /uploads
+RUN mkdir -p /data /uploads /maketrack-models && chown -R maketrack:maketrack /app /data /uploads /maketrack-models
 
 USER maketrack
 
