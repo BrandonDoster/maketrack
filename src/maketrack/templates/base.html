@@ -3,8 +3,29 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Self-hosted 3D printing project tracker with inventory and filament management.">
   <title>{% block title %}maketrack{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="/static/brand/maketrack-icon.svg">
+  {# PWA: installable as a standalone desktop/mobile app (network-only, no
+     offline caching — see static/sw.js). #}
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <meta name="theme-color" content="#C8252C">
+  {# iOS: enable add-to-home-screen standalone mode + home-screen icon. #}
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="maketrack">
+  <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("/sw.js").catch(function () {
+          /* Registration only works over HTTPS or localhost. On a plain-HTTP
+             LAN origin it silently no-ops; the app still works as a website. */
+        });
+      });
+    }
+  </script>
   {# FOUC-prevention: apply the theme class on <html> before any styles
      evaluate. Reads the maketrack_theme cookie, falls back to OS preference. #}
   <script>

@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
@@ -122,6 +122,17 @@ def create_app() -> FastAPI:
                 content={"status": "error", "version": __version__, "detail": "db unavailable"},
             )
         return JSONResponse({"status": "ok", "version": __version__})
+
+    @app.get("/sw.js", include_in_schema=False)
+    async def service_worker() -> FileResponse:
+        # Served from the root (not /static/) so the worker's scope is "/" and
+        # it can control every page. The header is belt-and-suspenders for the
+        # same reason. PWA install-only — see static/sw.js.
+        return FileResponse(
+            STATIC_DIR / "sw.js",
+            media_type="text/javascript",
+            headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"},
+        )
 
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
     app.include_router(api_filaments_router)
