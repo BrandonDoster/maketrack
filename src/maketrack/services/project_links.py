@@ -74,13 +74,29 @@ async def list_project_models(session: AsyncSession, project_id: int) -> list[Hy
     if not rows:
         return []
 
-    # Build thumbnail paths by looking up the model's thumbnail_filename.
+    # Resolve thumbnails: thumbnail_filename is a bare name but the image can
+    # live anywhere under the model folder (subfolders are allowed), so map it
+    # to the matching asset's file_path in one batched query.
+    thumb_model_ids = {m.id for _, _, m in rows if m.thumbnail_filename}
+    paths_by_model_filename: dict[tuple[int, str], str] = {}
+    if thumb_model_ids:
+        thumb_rows = (
+            await session.execute(
+                select(ModelAsset.model_id, ModelAsset.filename, ModelAsset.file_path).where(
+                    ModelAsset.model_id.in_(thumb_model_ids)
+                )
+            )
+        ).all()
+        paths_by_model_filename = {(mid, fname): fpath for mid, fname, fpath in thumb_rows}
+
     out: list[HydratedProjectModel] = []
     for link, asset, model in rows:
         thumb_path: str | None = None
         if model.thumbnail_filename:
-            # Thumbnail path is folder/photos/filename.
-            thumb_path = f"{model.folder_name}/photos/{model.thumbnail_filename}"
+            thumb_path = paths_by_model_filename.get(
+                (model.id, model.thumbnail_filename),
+                f"{model.folder_name}/photos/{model.thumbnail_filename}",
+            )
         out.append(
             HydratedProjectModel(link=link, asset=asset, model=model, thumbnail_path=thumb_path)
         )

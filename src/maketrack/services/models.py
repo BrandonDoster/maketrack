@@ -118,6 +118,41 @@ def read_description(model: Model) -> str | None:
     return body or None
 
 
+def thumbnail_path_for(model: Model, assets: list[ModelAsset]) -> str | None:
+    """Resolve `model.thumbnail_filename` to an asset's file_path.
+
+    The thumbnail is a bare filename (frontmatter-friendly) but the image can
+    live anywhere under the model folder now that subfolders are allowed, so
+    match it to a real asset rather than assuming `photos/`. Falls back to the
+    photos/ convention if no matching asset row is present yet.
+    """
+    if not model.thumbnail_filename:
+        return None
+    for a in assets:
+        if a.filename == model.thumbnail_filename:
+            return a.file_path
+    return f"{model.folder_name}/photos/{model.thumbnail_filename}"
+
+
+def build_file_tree(assets: list[ModelAsset], folder_name: str) -> dict:
+    """Group assets into a nested {dirs, files} tree by their path under the
+    model folder, so the detail page can render a collapsible layout that
+    mirrors how the user organised models/cad, models/stl, etc. on disk.
+
+    Returns {"dirs": {name: <subtree>}, "files": [ModelAsset, ...]}.
+    """
+    prefix = f"{folder_name}/"
+    root: dict = {"dirs": {}, "files": []}
+    for a in sorted(assets, key=lambda x: x.file_path):
+        rel = a.file_path[len(prefix) :] if a.file_path.startswith(prefix) else a.file_path
+        *dirs, _filename = rel.split("/")
+        node = root
+        for d in dirs:
+            node = node["dirs"].setdefault(d, {"dirs": {}, "files": []})
+        node["files"].append(a)
+    return root
+
+
 async def list_models(
     session: AsyncSession,
     *,
@@ -201,9 +236,7 @@ async def list_models_with_context(
         if tag is not None and tag not in decoded_tags:
             continue
         assets = assets_by_model.get(m.id, [])
-        thumb_path: str | None = None
-        if m.thumbnail_filename:
-            thumb_path = f"{m.folder_name}/photos/{m.thumbnail_filename}"
+        thumb_path = thumbnail_path_for(m, assets)
         formats = sorted({a.asset_type for a in assets})
         out.append(
             ModelListEntry(

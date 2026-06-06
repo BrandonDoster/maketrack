@@ -169,6 +169,46 @@ async def test_save_updates_existing_model_and_exits(client: AsyncClient) -> Non
     assert body["description"] == "Mount for the Nevermore filter"
 
 
+async def test_sync_from_disk_button_and_route(client: AsyncClient) -> None:
+    page = await client.get("/models")
+    assert 'action="/models/sync"' in page.text
+
+    resp = await client.post("/models/sync", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/models"
+
+
+async def test_detail_scoped_rescan_picks_up_disk_changes(client: AsyncClient) -> None:
+    """Opening a model rescans its folder, so a file dropped into models/ on
+    disk shows up without a manual full sync."""
+    from maketrack.config import get_settings
+
+    mid = (await client.post("/api/models", json={"name": "Rescan Me"})).json()["id"]
+    # create_model slugifies the name -> folder; drop a file into its models/.
+    folder = get_settings().models_path / "rescan-me" / "models"
+    (folder / "dropped.stl").write_bytes(_stl_bytes())
+
+    detail = await client.get(f"/models/{mid}")
+    assert detail.status_code == 200
+    assert "dropped.stl" in detail.text
+
+    assets = (await client.get(f"/api/models/{mid}/assets")).json()
+    assert any(a["filename"] == "dropped.stl" for a in assets)
+
+
+async def test_detail_renders_nested_folder_tree(client: AsyncClient) -> None:
+    from maketrack.config import get_settings
+
+    mid = (await client.post("/api/models", json={"name": "Tree"})).json()["id"]
+    cad = get_settings().models_path / "tree" / "models" / "cad"
+    cad.mkdir(parents=True)
+    (cad / "part.step").write_bytes(b"STEP")
+
+    detail = await client.get(f"/models/{mid}")
+    assert "cad/" in detail.text  # collapsible subfolder label
+    assert "part.step" in detail.text
+
+
 async def test_model_form_routing(client: AsyncClient) -> None:
     # /models/new is now the blank create form (GET), not a draft-creating POST.
     assert (await client.get("/models/new")).status_code == 200

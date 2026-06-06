@@ -9,9 +9,15 @@ from sqlalchemy.orm import Session
 
 from maketrack.config import Settings
 from maketrack.models.model import Model, ModelAsset
+from maketrack.services.assets import asset_type_from_filename
 from maketrack.services.three_mf import extract_thumbnail as extract_thumbnail_from_3mf
 
 logger = logging.getLogger(__name__)
+
+# Subtrees of a model folder that hold assets. The folder root only holds
+# README.md (metadata); files live under these, and either may nest
+# (e.g. models/cad/, models/stl/, a root models/print.3mf).
+ASSET_SUBDIRS = ("photos", "models")
 
 
 @dataclass
@@ -22,16 +28,19 @@ class ScanResult:
     errors: list[str]
 
 
-async def scan_models(session: AsyncSession, settings: Settings) -> ScanResult:
-    """Scan /maketrack-models and sync the database to match the filesystem.
+async def scan_models(
+    session: AsyncSession, settings: Settings, *, only_folder: str | None = None
+) -> ScanResult:
+    """Sync the database to match the model library on disk.
 
-    For each folder in models_path:
-    1. Read README.md and parse YAML frontmatter.
-    2. Upsert Model row with metadata from frontmatter.
-    3. Scan photos/ and models/ subdirs, upsert ModelAsset rows.
-    4. Extract 3MF thumbnails if needed.
-    5. Rebuild asset_ids JSON.
-    6. Archive any models no longer on disk.
+    For each folder in models_path: read README.md frontmatter, upsert the
+    Model, then recursively index every file under photos/ and models/ as a
+    ModelAsset (nesting preserved in file_path), extracting 3MF thumbnails.
+    Per-model orphan assets (rows whose file vanished) are swept.
+
+    `only_folder` rescans just that one folder and skips the cross-folder
+    archive sweep — used for the cheap per-model rescan when a detail page
+    is opened.
     """
     if not settings.models_path.exists():
         logger.warning(f"models_path does not exist: {settings.models_path}")
@@ -42,12 +51,12 @@ async def scan_models(session: AsyncSession, settings: Settings) -> ScanResult:
     rows_upserted = 0
     rows_deleted = 0
 
-    # Walk top-level folders in models_path.
     for folder in sorted(settings.models_path.iterdir()):
         if not folder.is_dir():
             continue
-
         folder_name = folder.name
+        if only_folder is not None and folder_name != only_folder:
+            continue
         scanned_folders.add(folder_name)
 
         readme_path = folder / "README.md"
@@ -57,15 +66,10 @@ async def scan_models(session: AsyncSession, settings: Settings) -> ScanResult:
             continue
 
         try:
-            # Read and hash the README.
             readme_content = readme_path.read_text(encoding="utf-8")
             readme_hash = hashlib.sha256(readme_content.encode()).hexdigest()
+            metadata = frontmatter.loads(readme_content).metadata
 
-            # Parse frontmatter.
-            post = frontmatter.loads(readme_content)
-            metadata = post.metadata
-
-            # Extract metadata from frontmatter.
             name = metadata.get("name", folder_name)
             thumbnail_filename = metadata.get("thumbnail")
             source_type = metadata.get("source_type")
@@ -73,15 +77,10 @@ async def scan_models(session: AsyncSession, settings: Settings) -> ScanResult:
             tags_raw = metadata.get("tags")
             notes = metadata.get("notes")
 
-            # Serialize tags back to JSON if present.
             tags_json = None
             if tags_raw:
-                if isinstance(tags_raw, list):
-                    tags_json = json.dumps(tags_raw)
-                elif isinstance(tags_raw, str):
-                    tags_json = json.dumps([tags_raw])
+                tags_json = json.dumps(tags_raw if isinstance(tags_raw, list) else [tags_raw])
 
-            # Upsert Model row.
             model = await session.run_sync(
                 _upsert_model,
                 folder_name,
@@ -95,103 +94,74 @@ async def scan_models(session: AsyncSession, settings: Settings) -> ScanResult:
             )
             rows_upserted += 1
 
-            # Scan and upsert assets.
+            # Recursively index photos/ and models/ (and their subfolders).
             photos_dir = folder / "photos"
-            models_dir = folder / "models"
-            asset_ids = []
-
-            for asset_dir, asset_type_prefix in [
-                (photos_dir, "image"),
-                (models_dir, None),
-            ]:
-                if not asset_dir.exists():
+            asset_ids: list[int] = []
+            seen_paths: list[str] = []
+            for subdir in ASSET_SUBDIRS:
+                sub = folder / subdir
+                if not sub.is_dir():
                     continue
-
-                for asset_file in sorted(asset_dir.iterdir()):
+                for asset_file in sorted(sub.rglob("*")):
                     if not asset_file.is_file():
                         continue
+                    # Skip dotfiles and anything under a dot-directory.
+                    if any(part.startswith(".") for part in asset_file.relative_to(folder).parts):
+                        continue
 
-                    # Determine asset type.
-                    if asset_type_prefix == "image":
-                        asset_type = "image"
-                    else:
-                        ext = asset_file.suffix.lower().lstrip(".")
-                        ext_map = {
-                            "stl": "stl",
-                            "step": "step",
-                            "stp": "step",
-                            "3mf": "3mf",
-                            "gcode": "gcode",
-                            "g": "gcode",
-                            "gco": "gcode",
-                            "png": "image",
-                            "jpg": "image",
-                            "jpeg": "image",
-                            "webp": "image",
-                            "gif": "image",
-                        }
-                        asset_type = ext_map.get(ext, "other")
-
-                    # Construct relative path.
-                    file_path = f"{folder_name}/{asset_dir.name}/{asset_file.name}"
-
-                    # Compute file size.
-                    file_size = asset_file.stat().st_size
-
-                    # Upsert asset (lazy SHA-256: only compute if not already in DB).
+                    rel = asset_file.relative_to(settings.models_path).as_posix()
+                    asset_type = asset_type_from_filename(asset_file.name)
                     asset = await session.run_sync(
                         _upsert_asset,
                         model.id,
                         asset_type,
                         asset_file.name,
-                        file_path,
-                        file_size,
+                        rel,
+                        asset_file.stat().st_size,
                     )
                     asset_ids.append(asset.id)
+                    seen_paths.append(rel)
 
-                    # Auto-extract a 3MF thumbnail when the model has none
-                    # yet (either from frontmatter or set earlier this scan).
+                    # Auto-extract a 3MF thumbnail when the model has none yet.
                     if asset_type == "3mf" and not thumbnail_filename:
                         try:
                             thumb_bytes = extract_thumbnail_from_3mf(asset_file)
                         except Exception as e:
-                            logger.warning(f"Failed to extract thumbnail from {file_path}: {e}")
+                            logger.warning(f"Failed to extract thumbnail from {rel}: {e}")
                             thumb_bytes = None
                         if thumb_bytes:
                             photos_dir.mkdir(exist_ok=True)
                             thumb_filename = f"{asset_file.stem}_thumbnail.png"
                             (photos_dir / thumb_filename).write_bytes(thumb_bytes)
-
+                            thumb_rel = f"{folder_name}/photos/{thumb_filename}"
                             thumb_asset = await session.run_sync(
                                 _upsert_asset,
                                 model.id,
                                 "image",
                                 thumb_filename,
-                                f"{folder_name}/photos/{thumb_filename}",
+                                thumb_rel,
                                 len(thumb_bytes),
                                 generated=True,
                             )
                             asset_ids.append(thumb_asset.id)
-
-                            # Persist the choice: write it back into the
-                            # README frontmatter (so a re-scan is stable) and
-                            # onto the row, then remember it for this folder.
+                            seen_paths.append(thumb_rel)
                             thumbnail_filename = thumb_filename
                             model.thumbnail_filename = thumb_filename
                             model.readme_hash = _set_readme_thumbnail(readme_path, thumb_filename)
 
-            # Update asset_ids on model.
-            if asset_ids:
-                model.asset_ids = json.dumps(asset_ids)
+            # Drop rows for files that no longer exist (moved/renamed/deleted).
+            rows_deleted += await session.run_sync(_sweep_model_assets, model.id, set(seen_paths))
+            model.asset_ids = json.dumps(asset_ids) if asset_ids else None
 
         except Exception as e:
             logger.error(f"Error scanning {folder_name}: {e!s}")
             errors.append(f"Error in {folder_name}: {e!s}")
-            # Mark model as malformed.
             await session.run_sync(_mark_malformed, folder_name)
 
-    # Archive sweep: delete any Model rows not in scanned_folders.
-    rows_deleted = await session.run_sync(_archive_orphans, scanned_folders)
+    # Cross-folder archive sweep: drop models whose folder is gone. Skipped
+    # for a scoped (single-folder) rescan so it can't delete other models.
+    if only_folder is None:
+        rows_deleted += await session.run_sync(_archive_orphans, scanned_folders)
 
     await session.commit()
 
@@ -253,8 +223,13 @@ def _upsert_asset(
     file_size: int,
     generated: bool = False,
 ) -> ModelAsset:
-    """Upsert a ModelAsset by model_id + filename."""
-    asset = session.query(ModelAsset).filter_by(model_id=model_id, filename=filename).first()
+    """Upsert a ModelAsset by (model_id, file_path).
+
+    Keyed on file_path, not filename: with subfolders, two files can share a
+    name (models/cad/x.stl vs models/stl/x.stl). The path is the file's
+    identity on disk.
+    """
+    asset = session.query(ModelAsset).filter_by(model_id=model_id, file_path=file_path).first()
     if not asset:
         asset = ModelAsset(
             model_id=model_id,
@@ -272,6 +247,21 @@ def _upsert_asset(
         asset.generated = generated
     session.flush()
     return asset
+
+
+def _sweep_model_assets(session: Session, model_id: int, seen_paths: set[str]) -> int:
+    """Delete a model's asset rows whose file_path was not seen this scan.
+
+    Fixes stale paths after a file is moved, renamed, or deleted on disk.
+    Cascades to any project_models link (filesystem is the source of truth).
+    """
+    rows = session.query(ModelAsset).filter_by(model_id=model_id).all()
+    count = 0
+    for asset in rows:
+        if asset.file_path not in seen_paths:
+            session.delete(asset)
+            count += 1
+    return count
 
 
 def _mark_malformed(session: Session, folder_name: str) -> None:

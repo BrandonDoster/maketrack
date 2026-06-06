@@ -4,6 +4,24 @@ All notable changes to this project will be documented here. Format roughly foll
 
 ## [Unreleased]
 
+### Added
+- **Manual "Sync from disk"** button on the Models list (`POST /models/sync`)
+  and an automatic **scoped rescan** of a model's folder when its detail page is
+  opened — so on-disk changes show up without waiting for the daily job.
+- **Subfolders inside `models/` and `photos/`** are now indexed recursively
+  (e.g. `models/cad/`, `models/stl/`, a root `models/print.3mf`), and the model
+  detail page renders a **collapsible file tree** mirroring the layout. Asset
+  rows are keyed on `file_path` (not filename, which isn't unique across
+  subfolders), and a per-model orphan sweep removes rows whose file was moved /
+  renamed / deleted on disk (fixes stale-path "file not found").
+- **Switchable 3D preview**: a fresh model page shows the collection thumbnail;
+  a per-STL **Preview** button loads that file into the viewer.
+
+### Fixed
+- Removed dead, broken lazy model-scan hook (`ensure_fresh_models` —
+  `datetime.now(datetime.UTC)` would have raised) in favour of the explicit
+  triggers above.
+
 ### Changed
 - **Deferred model create/edit.** `+ New model` is now a blank form (`GET
   /models/new`); nothing is written to disk or the DB until **Save**, so

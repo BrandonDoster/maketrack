@@ -8,6 +8,58 @@
 {% set btn_active = "rounded-md bg-crimson px-3 py-1.5 text-sm font-medium text-white hover:bg-crimson" %}
 {% set ic = "rounded border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-crimson focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white" %}
 
+{# ── recursive file tree: collapsible folders + per-file rows. Same markup
+     for read + edit; edit mode adds delete/thumbnail controls (Alpine state
+     lives on the enclosing #model-editor form), read mode adds Preview. ── #}
+{% macro filetree(node, edit_mode) %}
+  {% for dname, child in node.dirs | dictsort %}
+    <details open class="ml-1 border-l border-slate-200 pl-3 dark:border-slate-800">
+      <summary class="cursor-pointer select-none py-1 text-sm font-medium text-slate-600 dark:text-slate-300">{{ dname }}/</summary>
+      {{ filetree(child, edit_mode) }}
+    </details>
+  {% endfor %}
+  {% if node.files %}
+    <ul class="divide-y divide-slate-200 text-sm dark:divide-slate-800">
+      {% for a in node.files %}
+        <li class="flex items-center justify-between py-2.5"{% if edit_mode %} :class="deleted[{{ a.id }}] && 'opacity-50'"{% endif %}>
+          <div class="flex min-w-0 items-center gap-3">
+            <span class="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs uppercase text-slate-700 dark:bg-slate-800 dark:text-slate-300">{{ a.asset_type }}</span>
+            {% if not edit_mode and a.asset_type == 'image' and a.filename == model.thumbnail_filename %}
+              <span class="rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800 dark:bg-emerald-900/40 dark:text-crimson">thumbnail</span>
+            {% endif %}
+            {% if a.generated %}<span class="rounded bg-sky-100 px-2 py-0.5 text-xs text-sky-800 dark:bg-sky-900/40 dark:text-sky-300">auto</span>{% endif %}
+            <span class="truncate text-slate-700 dark:text-slate-300"{% if edit_mode %} :class="deleted[{{ a.id }}] && 'line-through'"{% endif %}>{{ a.filename }}</span>
+            {% if a.file_size %}<span class="text-xs text-slate-500 tabular-nums">{{ '%.1f'|format(a.file_size / 1024 / 1024) }} MB</span>{% endif %}
+          </div>
+          <div class="flex items-center gap-3">
+            {% if edit_mode %}
+              {% if a.asset_type == 'image' %}
+                <label class="flex items-center gap-1 text-xs text-slate-500">
+                  <input type="radio" name="__thumb" value="{{ a.filename }}"
+                         :checked="thumbnail === '{{ a.filename }}'" :disabled="deleted[{{ a.id }}]"
+                         @change="thumbnail = '{{ a.filename }}'; dirty = true"> thumbnail
+                </label>
+              {% endif %}
+              <a href="/assets/{{ a.id }}/download" class="text-xs text-slate-600 hover:text-crimson dark:text-slate-400 dark:hover:text-crimson">Download</a>
+              <button type="button" class="text-xs text-rose-600 hover:text-rose-500 dark:text-rose-400"
+                      @click="toggleDelete({{ a.id }}, '{{ a.filename }}')"
+                      x-text="deleted[{{ a.id }}] ? 'undo' : 'remove'">remove</button>
+              <template x-if="deleted[{{ a.id }}]"><input type="hidden" name="delete_asset_ids" value="{{ a.id }}"></template>
+            {% else %}
+              {% if a.asset_type == 'stl' %}
+                <button type="button" data-path="{{ a.file_path }}"
+                        onclick="MaketrackViewer.loadPath(this.dataset.path)"
+                        class="text-xs font-medium text-crimson hover:underline">Preview</button>
+              {% endif %}
+              <a href="/assets/{{ a.id }}/download" class="text-xs text-slate-600 hover:text-crimson dark:text-slate-400 dark:hover:text-crimson">Download</a>
+            {% endif %}
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% endmacro %}
+
 {% if errors %}
   <div class="mb-4 rounded border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-700 dark:bg-rose-950/40 dark:text-rose-200">
     <ul class="list-disc pl-5">{% for err in errors %}<li>{{ err }}</li>{% endfor %}</ul>
@@ -17,9 +69,7 @@
 <a href="/models" class="text-sm text-slate-500 hover:text-crimson dark:text-slate-400 dark:hover:text-crimson">← Models</a>
 
 {% if edit_mode %}
-{# ── Edit / create draft: ONE multipart form. Nothing is persisted until
-     Save — staged files, deletions, field edits and the thumbnail choice
-     all commit together. A beforeunload guard warns about unsaved work. ── #}
+{# ── Edit / create draft: ONE multipart form, committed only on Save. ── #}
 <form id="model-editor"
       method="post" enctype="multipart/form-data"
       action="{% if is_new %}/models{% else %}/models/{{ model.id }}{% endif %}"
@@ -28,33 +78,28 @@
       @input="dirty = true" @change="dirty = true">
 
   <div class="mt-3 grid grid-cols-1 gap-6 lg:grid-cols-2">
-    {# ── left column: fields ──────────────────────────────────────────── #}
     <div class="min-w-0 space-y-4">
       <label class="block">
         <span class="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Name</span>
-        <input type="text" name="name" required value="{{ model.name or '' }}"
-               placeholder="My Model"
+        <input type="text" name="name" required value="{{ model.name or '' }}" placeholder="My Model"
                class="{{ ic }} mt-1 w-full text-2xl font-semibold">
       </label>
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <label class="block">
           <span class="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Source type</span>
           <input type="text" name="source_type" value="{{ model.source_type or '' }}"
-                 placeholder="thingiverse, printables, github, local…"
-                 class="{{ ic }} mt-1 w-full">
+                 placeholder="thingiverse, printables, github, local…" class="{{ ic }} mt-1 w-full">
         </label>
         <label class="block">
           <span class="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Source URL</span>
           <input type="url" name="source_url" value="{{ model.source_url or '' }}"
-                 placeholder="https://…"
-                 class="{{ ic }} mt-1 w-full">
+                 placeholder="https://…" class="{{ ic }} mt-1 w-full">
         </label>
       </div>
       <label class="block">
         <span class="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Tags</span>
         <input type="text" name="tags" value="{{ tags_str }}"
-               placeholder="comma-separated, e.g. voron, mods, supports"
-               class="{{ ic }} mt-1 w-full">
+               placeholder="comma-separated, e.g. voron, mods, supports" class="{{ ic }} mt-1 w-full">
       </label>
       <label class="block">
         <span class="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Description</span>
@@ -67,7 +112,6 @@
       </label>
     </div>
 
-    {# ── right column: save / delete + unsaved hint ───────────────────── #}
     <div class="space-y-3">
       <div class="flex flex-wrap justify-end gap-2">
         {% if not is_new %}
@@ -79,7 +123,6 @@
     </div>
   </div>
 
-  {# ── files: existing assets (deletable) + staged uploads ───────────── #}
   <section class="mt-8 rounded-lg border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
     <div class="mb-4 flex items-center justify-between">
       <h2 class="text-lg font-semibold text-slate-900 dark:text-white">Files</h2>
@@ -91,66 +134,31 @@
                 class="rounded-md bg-crimson px-3 py-1.5 text-sm font-medium text-white hover:bg-crimson">+ Add files</button>
       </div>
     </div>
-    <p class="mb-3 text-xs text-slate-500">STL/STEP/3MF/G-code/images · 200 MB each. Files upload when you hit Save. 3MF thumbnails extract automatically.</p>
+    <p class="mb-3 text-xs text-slate-500">New files upload to <span class="font-mono">models/</span> (or <span class="font-mono">photos/</span> for images) on Save. Organise into subfolders directly on disk, then "Sync from disk". 200 MB each.</p>
 
-    {# existing, committed assets #}
-    {% if assets %}
-      <ul class="divide-y divide-slate-200 text-sm dark:divide-slate-800">
-        {% for a in assets %}
-          <li class="flex items-center justify-between py-3" :class="deleted[{{ a.id }}] && 'opacity-50'">
-            <div class="flex min-w-0 items-center gap-3">
-              <span class="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs uppercase text-slate-700 dark:bg-slate-800 dark:text-slate-300">{{ a.asset_type }}</span>
-              {% if a.generated %}
-                <span class="rounded bg-sky-100 px-2 py-0.5 text-xs text-sky-800 dark:bg-sky-900/40 dark:text-sky-300">auto</span>
-              {% endif %}
-              <span class="truncate text-slate-700 dark:text-slate-300" :class="deleted[{{ a.id }}] && 'line-through'">{{ a.filename }}</span>
-              {% if a.file_size %}<span class="text-xs text-slate-500 tabular-nums">{{ '%.1f'|format(a.file_size / 1024 / 1024) }} MB</span>{% endif %}
-            </div>
-            <div class="flex items-center gap-3">
-              {% if a.asset_type == 'image' %}
-                <label class="flex items-center gap-1 text-xs text-slate-500">
-                  <input type="radio" name="__thumb" value="{{ a.filename }}"
-                         :checked="thumbnail === '{{ a.filename }}'"
-                         :disabled="deleted[{{ a.id }}]"
-                         @change="thumbnail = '{{ a.filename }}'; dirty = true">
-                  thumbnail
-                </label>
-              {% endif %}
-              <a href="/assets/{{ a.id }}/download" class="text-xs text-slate-600 hover:text-crimson dark:text-slate-400 dark:hover:text-crimson">Download</a>
-              <button type="button" class="text-xs text-rose-600 hover:text-rose-500 dark:text-rose-400"
-                      @click="toggleDelete({{ a.id }}, '{{ a.filename }}')"
-                      x-text="deleted[{{ a.id }}] ? 'undo' : 'remove'">remove</button>
-              <template x-if="deleted[{{ a.id }}]">
-                <input type="hidden" name="delete_asset_ids" value="{{ a.id }}">
-              </template>
-            </div>
-          </li>
-        {% endfor %}
-      </ul>
+    {% if file_tree.dirs or file_tree.files %}
+      {{ filetree(file_tree, True) }}
     {% endif %}
 
-    {# staged (not-yet-uploaded) files #}
     <ul class="mt-2 divide-y divide-slate-200 text-sm dark:divide-slate-800" x-show="staged.length" x-cloak>
       <template x-for="(f, i) in staged" :key="f.key">
-        <li class="flex items-center justify-between py-3">
+        <li class="flex items-center justify-between py-2.5">
           <div class="flex min-w-0 items-center gap-3">
             <span class="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">staged</span>
             <span class="truncate text-slate-700 dark:text-slate-300" x-text="f.name"></span>
             <span class="text-xs text-slate-500 tabular-nums" x-text="fmtSize(f.size)"></span>
           </div>
-          <button type="button" class="text-xs text-rose-600 hover:text-rose-500 dark:text-rose-400"
-                  @click="removeStaged(i)">✕</button>
+          <button type="button" class="text-xs text-rose-600 hover:text-rose-500 dark:text-rose-400" @click="removeStaged(i)">✕</button>
         </li>
       </template>
     </ul>
 
-    {% if not assets %}
+    {% if not (file_tree.dirs or file_tree.files) %}
       <p class="py-6 text-center text-sm text-slate-500" x-show="!staged.length">
         No files yet — add STL / 3MF / images above.
       </p>
     {% endif %}
 
-    {# single hidden input carries the chosen thumbnail filename to the server #}
     <input type="hidden" name="thumbnail" :value="thumbnail">
   </section>
 </form>
@@ -210,6 +218,7 @@
 
 {% else %}
 {# ── Read mode ─────────────────────────────────────────────────────────── #}
+{% set stl_files = assets | selectattr('asset_type', 'equalto', 'stl') | list %}
 <div class="mt-3 grid grid-cols-1 gap-6 lg:grid-cols-2">
   <div class="min-w-0">
     <h1 class="text-3xl font-semibold text-slate-900 dark:text-white">{{ model.name }}</h1>
@@ -245,58 +254,45 @@
     </div>
 
     <div class="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-      {% if first_stl %}
-        <div id="stl-viewer"
-             data-stl-url="/model-media/{{ first_stl.file_path }}"
-             class="aspect-square w-full rounded bg-slate-100 dark:bg-slate-950"></div>
-        <p class="mt-2 text-xs text-slate-500">
-          Showing <span class="font-mono">{{ first_stl.filename }}</span>{% if stl_assets|length > 1 %} ({{ stl_assets|length - 1 }} more STL not shown){% endif %} · drag to orbit, scroll to zoom.
-        </p>
-        <script type="importmap">
-        {
-          "imports": {
-            "three": "/static/vendor/three/three.module.min.js",
-            "three/addons/": "/static/vendor/three/addons/"
-          }
-        }
-        </script>
-        <script type="module" src="/static/stl-viewer.js"></script>
-      {% elif thumbnail_path %}
-        <img src="/model-media/{{ thumbnail_path }}" alt="thumbnail"
-             class="aspect-square w-full rounded bg-slate-100 object-contain dark:bg-slate-950">
-        <p class="mt-2 text-xs text-slate-500">No STL uploaded yet — showing the embedded thumbnail.</p>
-      {% else %}
-        <div class="flex aspect-square w-full items-center justify-center rounded bg-slate-100 text-sm text-slate-500 dark:bg-slate-950">
-          No preview — add an STL or 3MF.
-        </div>
-      {% endif %}
+      {# Default view: the collection thumbnail. The viewer (#stl-viewer) is
+         hidden until a Preview button calls MaketrackViewer.load(). #}
+      <div id="preview-placeholder">
+        {% if thumbnail_path %}
+          <img src="/model-media/{{ thumbnail_path }}" alt="thumbnail"
+               class="aspect-square w-full rounded bg-slate-100 object-contain dark:bg-slate-950">
+        {% else %}
+          <div class="flex aspect-square w-full items-center justify-center rounded bg-slate-100 text-sm text-slate-500 dark:bg-slate-950">
+            No thumbnail.
+          </div>
+        {% endif %}
+        {% if stl_files %}
+          <p class="mt-2 text-xs text-slate-500">Click <span class="font-medium text-crimson">Preview</span> on an STL below to view it here.</p>
+        {% endif %}
+      </div>
+      <div id="stl-viewer" class="hidden aspect-square w-full rounded bg-slate-100 dark:bg-slate-950"></div>
     </div>
   </div>
 </div>
 
+{% if stl_files %}
+  {# Lazy-load three.js only when there's an STL that could be previewed. #}
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "/static/vendor/three/three.module.min.js",
+      "three/addons/": "/static/vendor/three/addons/"
+    }
+  }
+  </script>
+  <script type="module" src="/static/stl-viewer.js"></script>
+{% endif %}
+
 <section class="mt-8 rounded-lg border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
-  <h2 class="mb-4 text-lg font-semibold text-slate-900 dark:text-white">Assets ({{ assets|length }})</h2>
-  {% if assets %}
-    <ul class="divide-y divide-slate-200 text-sm dark:divide-slate-800">
-      {% for a in assets %}
-        <li class="flex items-center justify-between py-3">
-          <div class="flex min-w-0 items-center gap-3">
-            <span class="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs uppercase text-slate-700 dark:bg-slate-800 dark:text-slate-300">{{ a.asset_type }}</span>
-            {% if a.asset_type == 'image' and a.filename == model.thumbnail_filename %}
-              <span class="rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800 dark:bg-emerald-900/40 dark:text-crimson">thumbnail</span>
-            {% endif %}
-            {% if a.generated %}
-              <span class="rounded bg-sky-100 px-2 py-0.5 text-xs text-sky-800 dark:bg-sky-900/40 dark:text-sky-300">auto</span>
-            {% endif %}
-            <span class="truncate text-slate-700 dark:text-slate-300">{{ a.filename }}</span>
-            {% if a.file_size %}<span class="text-xs text-slate-500 tabular-nums">{{ '%.1f'|format(a.file_size / 1024 / 1024) }} MB</span>{% endif %}
-          </div>
-          <a href="/assets/{{ a.id }}/download" class="text-xs text-slate-600 hover:text-crimson dark:text-slate-400 dark:hover:text-crimson">Download</a>
-        </li>
-      {% endfor %}
-    </ul>
+  <h2 class="mb-4 text-lg font-semibold text-slate-900 dark:text-white">Files ({{ assets|length }})</h2>
+  {% if file_tree.dirs or file_tree.files %}
+    {{ filetree(file_tree, False) }}
   {% else %}
-    <p class="py-6 text-center text-sm text-slate-500">No assets uploaded yet.</p>
+    <p class="py-6 text-center text-sm text-slate-500">No files yet — add some in edit mode, or drop them in the folder on disk and Sync.</p>
   {% endif %}
 </section>
 {% endif %}

@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from maketrack.config import get_settings
 from maketrack.db import get_session
 from maketrack.errors import NotFoundError
 from maketrack.routes.ui._forms import (
@@ -19,6 +20,7 @@ from maketrack.services import assets as asset_svc
 from maketrack.services import models as svc
 from maketrack.services._pagination import DEFAULT_PAGE_SIZE
 from maketrack.services.uploads import UploadError, delete_model_file, delete_model_folder
+from maketrack.sync.model_scan import scan_models
 from maketrack.templating import templates
 
 router = APIRouter(tags=["ui-models"])
@@ -147,14 +149,12 @@ async def _render_detail(
         tags = tags_override or []
         description = description_override
         thumb_path = None
-        stl_assets: list = []
+        file_tree: dict = {"dirs": {}, "files": []}
     else:
         model = await svc.get_model(session, model_id)
         assets = list(await svc.list_assets(session, model_id))
-        thumb_path = None
-        if model.thumbnail_filename:
-            thumb_path = f"{model.folder_name}/photos/{model.thumbnail_filename}"
-        stl_assets = [a for a in assets if a.asset_type == "stl"]
+        thumb_path = svc.thumbnail_path_for(model, assets)
+        file_tree = svc.build_file_tree(assets, model.folder_name)
         tags = tags_override if tags_override is not None else svc.decode_tags(model.tags)
         description = (
             description_override
@@ -172,9 +172,8 @@ async def _render_detail(
             "description": description,
             "description_html": render_markdown(description),
             "assets": assets,
+            "file_tree": file_tree,
             "thumbnail_path": thumb_path,
-            "stl_assets": stl_assets,
-            "first_stl": stl_assets[0] if stl_assets else None,
             "edit_mode": edit_mode,
             "errors": errors,
         },
@@ -189,6 +188,14 @@ async def new_page(request: Request, session: SessionDep) -> HTMLResponse:
     return await _render_detail(request, session, None, edit_mode=True)
 
 
+@router.post("/models/sync", response_class=HTMLResponse)
+async def sync_from_disk(session: SessionDep) -> HTMLResponse:
+    """Manual full scan of the model library — picks up new folders, files
+    moved into subfolders, deletions, etc. that happened directly on disk."""
+    await scan_models(session, get_settings())
+    return RedirectResponse(url="/models", status_code=status.HTTP_303_SEE_OTHER)
+
+
 @router.get("/models/{model_id}", response_class=HTMLResponse)
 async def detail_page(
     model_id: int,
@@ -196,6 +203,12 @@ async def detail_page(
     session: SessionDep,
     edit: bool = False,
 ) -> HTMLResponse:
+    # Viewing a model rescans just its folder so on-disk edits show up
+    # immediately. Skip in edit mode so the rescan can't fight the draft
+    # editor (which holds unsaved staged changes client-side).
+    if not edit:
+        model = await svc.get_model(session, model_id)
+        await scan_models(session, get_settings(), only_folder=model.folder_name)
     return await _render_detail(request, session, model_id, edit_mode=edit)
 
 

@@ -125,6 +125,67 @@ async def test_scan_deletes_orphan_and_cascades_project_link(session) -> None:
 
 
 @pytest.mark.usefixtures("db_engine")
+async def test_scan_indexes_nested_subfolders(session) -> None:
+    folder = _make_folder("emu")
+    (folder / "models" / "cad").mkdir()
+    (folder / "models" / "stl").mkdir()
+    (folder / "models" / "cad" / "part.step").write_bytes(b"STEP")
+    (folder / "models" / "stl" / "part.stl").write_bytes(_stl_bytes())
+    (folder / "models" / "print.3mf").write_bytes(_3mf_bytes())
+
+    await scan_models(session, get_settings())
+
+    paths = {a.file_path for a in (await session.execute(select(ModelAsset))).scalars().all()}
+    assert "emu/models/cad/part.step" in paths
+    assert "emu/models/stl/part.stl" in paths
+    assert "emu/models/print.3mf" in paths
+
+
+@pytest.mark.usefixtures("db_engine")
+async def test_scan_same_filename_in_two_subdirs(session) -> None:
+    folder = _make_folder("dup")
+    (folder / "models" / "cad").mkdir()
+    (folder / "models" / "stl").mkdir()
+    (folder / "models" / "cad" / "part.stl").write_bytes(_stl_bytes())
+    (folder / "models" / "stl" / "part.stl").write_bytes(_stl_bytes())
+
+    await scan_models(session, get_settings())
+
+    paths = {a.file_path for a in (await session.execute(select(ModelAsset))).scalars().all()}
+    assert paths == {"dup/models/cad/part.stl", "dup/models/stl/part.stl"}
+
+
+@pytest.mark.usefixtures("db_engine")
+async def test_scan_sweeps_moved_file(session) -> None:
+    folder = _make_folder("mv")
+    (folder / "models" / "a.stl").write_bytes(_stl_bytes())
+    await scan_models(session, get_settings())
+
+    # Move the file into a subfolder on disk, then rescan.
+    (folder / "models" / "stl").mkdir()
+    (folder / "models" / "a.stl").rename(folder / "models" / "stl" / "a.stl")
+    await scan_models(session, get_settings())
+
+    paths = [a.file_path for a in (await session.execute(select(ModelAsset))).scalars().all()]
+    assert paths == ["mv/models/stl/a.stl"]  # old path swept, new path indexed
+
+
+@pytest.mark.usefixtures("db_engine")
+async def test_scan_only_folder_leaves_other_models_alone(session) -> None:
+    _make_folder("keep")  # README only
+    target = _make_folder("target")
+    (target / "models" / "a.stl").write_bytes(_stl_bytes())
+    await scan_models(session, get_settings())  # full scan indexes both
+
+    # 'keep' vanishes on disk; a SCOPED rescan of 'target' must not delete it.
+    shutil.rmtree(get_settings().models_path / "keep")
+    await scan_models(session, get_settings(), only_folder="target")
+
+    folders = {m.folder_name for m in (await session.execute(select(Model))).scalars().all()}
+    assert folders == {"keep", "target"}
+
+
+@pytest.mark.usefixtures("db_engine")
 async def test_scan_flags_folder_without_readme(session) -> None:
     root = get_settings().models_path / "no-readme"
     (root / "models").mkdir(parents=True, exist_ok=True)

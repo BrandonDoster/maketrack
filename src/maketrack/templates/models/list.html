@@ -27,10 +27,18 @@
       {{ items|length }} model{{ '' if items|length == 1 else 's' }} · STL, STEP, 3MF and gcode files grouped per print.
     </p>
   </div>
-  <a href="/models/new"
-     class="rounded-md bg-crimson px-4 py-2 text-sm font-medium text-white hover:bg-crimson">
-    + New model
-  </a>
+  <div class="flex items-center gap-2">
+    <form method="post" action="/models/sync">
+      <button type="submit" title="Re-scan the models folder on disk for new/moved/deleted files"
+              class="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+        Sync from disk
+      </button>
+    </form>
+    <a href="/models/new"
+       class="rounded-md bg-crimson px-4 py-2 text-sm font-medium text-white hover:bg-crimson">
+      + New model
+    </a>
+  </div>
 </header>
 
 {# ── view + filter toolbar ──────────────────────────────────────────── #}

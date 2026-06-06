@@ -316,21 +316,33 @@ printer_build_models (
 > /maketrack-models/<folder_name>/
 >   README.md          # YAML frontmatter (name, thumbnail, source_type,
 >                      #   source_url, tags, notes) + markdown body = description
->   photos/            # images + extracted/generated thumbnails
->   models/            # printable files: stl, step, 3mf, gcode
+>   photos/            # images + extracted/generated thumbnails (may nest)
+>   models/            # printable files: stl, step, 3mf, gcode (may nest)
+>     cad/  stl/        #   e.g. organise by kind; a root models/print.3mf is fine
 > ```
 >
 > Why: the library is browsable/editable directly over an NFS/SMB share, it
 > backs up as a single directory tree, and metadata lives next to the files.
+> The folder root only holds `README.md` + `photos/` + `models/`; **`photos/`
+> and `models/` may contain arbitrary subfolders** — the scan recurses them and
+> the detail page renders a collapsible tree mirroring the layout.
 >
 > **Two write paths, both kept in sync:**
 > 1. **Web app / MCP** — every create / edit / delete / upload writes through
 >    to disk *and* the DB in the same request (no waiting for a scan). README
->    is rewritten on edit; the folder is `rmtree`d on delete.
-> 2. **`sync/model_scan.py`** — reconciles edits made directly on the share
->    (daily APScheduler job + lazy-on-browse + manual "Sync now"). It upserts
->    a Model per folder and a ModelAsset per file, extracts 3MF thumbnails,
->    and hard-deletes Models whose folders vanished.
+>    is rewritten on edit; the folder is `rmtree`d on delete. App-uploaded files
+>    land in `models/` (or `photos/` for images); manual on-disk organisation
+>    into subfolders is preserved by the scan.
+> 2. **`sync/model_scan.py`** — reconciles edits made directly on the share.
+>    Triggers: daily APScheduler job · a manual **"Sync from disk"** button on
+>    the Models list (`POST /models/sync`, full scan) · a **scoped rescan of one
+>    folder** when its detail page is opened in read mode
+>    (`scan_models(..., only_folder=...)`, no archive sweep). It upserts a Model
+>    per folder and a ModelAsset per file (recursing `photos/`+`models/`),
+>    extracts 3MF thumbnails, **sweeps per-model asset rows whose file vanished**
+>    (fixes stale paths after a move/rename — keyed on `file_path`, not filename,
+>    since names aren't unique across subfolders), and hard-deletes Models whose
+>    whole folder vanished.
 >
 > `folder_name` is the slug of the name at creation, unique, and **stable
 > across renames** (renaming would invalidate every asset `file_path`). The
@@ -590,7 +602,7 @@ guard) and is a regular file.
 
 ### Thumbnails
 
-- `models.thumbnail_filename` names an image file in the model's `photos/` dir.
+- `models.thumbnail_filename` names an image asset of the model (a bare filename, normally in `photos/` but resolved to whatever asset matches, so it works if the image is nested — see `services.models.thumbnail_path_for`).
 - Set explicitly via the UI (Set as thumbnail button) or via the MCP `set_model_thumbnail` tool — both write the choice back into README frontmatter.
 - Set automatically the first time a 3MF (or any image) is added if no thumbnail is yet set.
 - Replace by changing `thumbnail_filename`; the old image file stays as a regular asset.
@@ -598,7 +610,12 @@ guard) and is a regular file.
 
 ## 3D preview
 
-STL only in v1. The model detail page lazy-loads three.js + STLLoader (~300 KB JS, only on that page) and renders the STL client-side from `/model-media/<file_path>`. No server-side mesh processing.
+STL only in v1. The model detail page lazy-loads three.js + STLLoader (~300 KB JS, only on that page) and renders STLs client-side from `/model-media/<file_path>`. No server-side mesh processing.
+
+The preview is **switchable**: a fresh page load shows the collection thumbnail
+(no model loaded), and each STL row in the file tree has a **Preview** button
+that calls `window.MaketrackViewer.loadPath(<file_path>)` to swap that model into
+the viewer (built lazily on first use; `static/stl-viewer.js`).
 
 3MF and STEP are download-only in v1. Format badges in the list view tell the user what's available. Phase 2 considers 3MF preview via three.js's `3MFLoader`. STEP preview is permanently out of scope — too heavy.
 

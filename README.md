@@ -11,7 +11,7 @@ See [`CLAUDE.md`](./CLAUDE.md) for the full project spec, data model, and roadma
 
 ## Status
 
-v0.1.0 cut. Detail pages share a read/edit toggle, the create flow drops you straight into edit mode on a draft stub, and all entities (projects, models, printers, filaments, inventory, locations) are reachable through the UI and a read-only MCP server.
+v0.1.0 cut, plus active work on `dev`. All entities (projects, models, printers, filaments, inventory, locations) are reachable through the UI and a read-only MCP server. Detail pages share a read/edit toggle; most use a draft-stub create flow, while **models** are filesystem-backed (one folder per model under `/maketrack-models`, with a `README.md` + `photos/` + `models/`) and use a deferred create form that commits nothing until you hit Save. The library can be edited directly on disk over a share and reconciled with a "Sync from disk" scan.
 
 ## Quickstart (dev)
 
@@ -53,15 +53,17 @@ Tools available:
 
 ## Quickstart (Docker)
 
-See `docker-compose.example.yml`. Mount `/data` and `/uploads` as volumes.
+See `docker-compose.example.yml`. Mount `/data`, `/uploads`, and
+`/maketrack-models` as volumes (DB, photos, and the model library
+respectively).
 
 The container runs as **UID/GID `1000:1000`** (matches the default first-user
 UID on most desktop Linux distros). When you bind-mount host directories for
-`/data` and `/uploads`, they need to be writable by that UID:
+those paths, they need to be writable by that UID:
 
 ```bash
-mkdir -p maketrack-data maketrack-uploads
-sudo chown -R 1000:1000 maketrack-data maketrack-uploads
+mkdir -p maketrack-data maketrack-uploads maketrack-models
+sudo chown -R 1000:1000 maketrack-data maketrack-uploads maketrack-models
 ```
 
 If your host user is already UID 1000, the chown is a no-op. If not, either
