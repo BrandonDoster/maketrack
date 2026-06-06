@@ -619,3 +619,61 @@ async def test_edit_mode_renders_inline_widgets(client: AsyncClient) -> None:
     assert "/qty" in detail.text
     # Notes textarea is part of the basic-fields form.
     assert 'name="notes"' in detail.text
+
+
+async def test_model_picker_renders_collapsible_browser(client: AsyncClient) -> None:
+    """The 'link a model' UI is an in-page collapsible browser (collection
+    name → its files with a per-file Link button), not a flat dropdown that
+    lists every file across every collection."""
+    project = await client.post("/api/projects", json={"name": "P"})
+    pid = project.json()["id"]
+    model = await client.post("/api/models", json={"name": "Voron Skirt"})
+    mid = model.json()["id"]
+    aid = await add_model_asset(client, mid, "skirt.stl")
+
+    detail = await client.get(f"/projects/{pid}?edit=true")
+    body = detail.text
+    # Collection name + filename are shown, each file gets a Link button that
+    # POSTs the asset id to the add-model endpoint.
+    assert "Voron Skirt" in body
+    assert "skirt.stl" in body
+    assert f'hx-post="/projects/{pid}/models"' in body
+    assert f'"model_asset_id": "{aid}"' in body
+    # The library filter input is present; the old flat <optgroup> select is gone.
+    assert 'placeholder="Filter collections' in body
+    assert "<optgroup" not in body
+
+
+async def test_model_picker_excludes_images(client: AsyncClient) -> None:
+    """You link a printable file to a project, not a thumbnail — image assets
+    don't appear in the picker, and a collection with only images is omitted."""
+    project = await client.post("/api/projects", json={"name": "P"})
+    pid = project.json()["id"]
+    model = await client.post("/api/models", json={"name": "PhotoOnly"})
+    mid = model.json()["id"]
+    # Upload only an image (becomes the thumbnail) — no printable file.
+    await client.post(
+        f"/api/models/{mid}/assets",
+        files={"file": ("cover.png", io.BytesIO(_PNG), "image/png")},
+    )
+
+    detail = await client.get(f"/projects/{pid}?edit=true")
+    assert "cover.png" not in detail.text
+    # No printable file anywhere → the empty-state copy shows instead.
+    assert "already linked" in detail.text
+
+
+async def test_model_picker_hides_already_linked_file(client: AsyncClient) -> None:
+    """Once a file is linked it drops out of the browser (only unlinked,
+    printable files are offered)."""
+    project = await client.post("/api/projects", json={"name": "P"})
+    pid = project.json()["id"]
+    model = await client.post("/api/models", json={"name": "Bracket"})
+    mid = model.json()["id"]
+    aid = await add_model_asset(client, mid, "bracket.stl")
+    await client.post(f"/api/projects/{pid}/models", json={"model_asset_id": aid})
+
+    detail = await client.get(f"/projects/{pid}?edit=true")
+    # The linked file shows in the linked list but not as a picker Link button.
+    assert f'"model_asset_id": "{aid}"' not in detail.text
+    assert "already linked" in detail.text

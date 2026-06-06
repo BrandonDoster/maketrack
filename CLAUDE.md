@@ -452,6 +452,18 @@ project_models (
 > `models.id`), not an asset — a build entry references the model collection,
 > while a project references the exact file it prints.
 
+> **Linking a file (project edit page).** Instead of a flat dropdown listing
+> every asset across every collection (which doesn't scale once the library
+> grows), the Models section renders an **in-page browser**: a scrollable box of
+> collapsed collection rows (display name = the folder's README name), each
+> expanding to that collection's `models/` file tree (nested subfolders
+> collapsible, mirroring `model_detail`). Every file row has a **+ Link** button
+> (`hx-post` to `/projects/{id}/models`, qty defaults to 1 — adjust it inline in
+> the linked list afterward). An Alpine name-filter narrows the collection list.
+> Only **unlinked, printable** files are offered — images/thumbnails are hidden
+> and a collection with no linkable file is omitted. Backed by
+> `project_links.list_unlinked_asset_trees`.
+
 ### project_filaments
 
 ```sql

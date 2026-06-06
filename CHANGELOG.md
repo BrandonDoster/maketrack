@@ -16,6 +16,11 @@ All notable changes to this project will be documented here. Format roughly foll
   renamed / deleted on disk (fixes stale-path "file not found").
 - **Switchable 3D preview**: a fresh model page shows the collection thumbnail;
   a per-STL **Preview** button loads that file into the viewer.
+- **In-page model browser** on the project edit page replaces the flat
+  "every file in the library" dropdown for linking a file: a scrollable box of
+  collapsed collections (by README name), each expanding to its `models/` tree
+  with a per-file **+ Link** button, plus a name-filter. Only unlinked,
+  printable files are offered (images hidden).
 
 ### Fixed
 - Removed dead, broken lazy model-scan hook (`ensure_fresh_models` —

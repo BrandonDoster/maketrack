@@ -108,7 +108,7 @@ async def _render_detail(
     available_items: list = []
     printers: list = []
     if edit_mode:
-        available_assets = list(await link_svc.list_unlinked_assets(session, project_id))
+        available_assets = list(await link_svc.list_unlinked_asset_trees(session, project_id))
         available_filaments = list(
             (
                 await session.execute(
@@ -230,7 +230,7 @@ async def _models_partial(request: Request, project_id: int, session: AsyncSessi
     reach this from edit mode, so render the section in edit mode."""
     project = await svc.get_project(session, project_id)
     project_models = await link_svc.list_project_models(session, project_id)
-    available_assets = await link_svc.list_unlinked_assets(session, project_id)
+    available_assets = await link_svc.list_unlinked_asset_trees(session, project_id)
     return templates.TemplateResponse(
         request,
         "projects/_models_section.html",

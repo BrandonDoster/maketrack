@@ -22,6 +22,7 @@ from maketrack.schemas.project import (
     ProjectModelLinkCreate,
     ProjectModelLinkUpdate,
 )
+from maketrack.services.models import build_file_tree
 
 
 @dataclass(slots=True)
@@ -30,6 +31,16 @@ class HydratedProjectModel:
     asset: ModelAsset
     model: Model
     thumbnail_path: str | None
+
+
+@dataclass(slots=True)
+class UnlinkedModelTree:
+    """A model collection plus its still-linkable files, arranged as a
+    collapsible file tree for the project's 'link a model' browser."""
+
+    model: Model
+    tree: dict
+    count: int
 
 
 @dataclass(slots=True)
@@ -334,3 +345,24 @@ async def list_unlinked_assets(
             result.append((model, unlinked))
 
     return result
+
+
+async def list_unlinked_asset_trees(
+    session: AsyncSession, project_id: int
+) -> list[UnlinkedModelTree]:
+    """Models with their unlinked, printable files arranged as a collapsible
+    tree — feeds the project's in-page 'link a model' browser instead of a
+    flat dropdown that lists every file across every collection.
+
+    Images (thumbnails / photos) are dropped: a project links a printable
+    file, not a picture. Collections left with no linkable file are omitted.
+    Models are returned in name order (from list_unlinked_assets).
+    """
+    out: list[UnlinkedModelTree] = []
+    for model, assets in await list_unlinked_assets(session, project_id):
+        printable = [a for a in assets if a.asset_type != "image"]
+        if not printable:
+            continue
+        tree = build_file_tree(printable, model.folder_name)
+        out.append(UnlinkedModelTree(model=model, tree=tree, count=len(printable)))
+    return out
