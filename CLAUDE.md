@@ -127,6 +127,16 @@ Volumes (mount in compose):
 - `/uploads` — project / printer / inventory photos
 - `/maketrack-models` — the model library (one folder per model; see [models](#models))
 
+The app image deliberately does **not** bundle a file-sharing server — it stays
+single-process and non-root. The model library is a plain folder, so users edit
+it directly (local FS, rsync, NFS, etc.) and the scan reconciles. For a turnkey
+LAN share, `docker-compose.example.yml` ships a commented-out
+[`dockurr/samba`](https://github.com/dockur/samba) sidecar that serves the same
+`./maketrack-models` dir over SMB (UID/GID 1000 so the app can read its writes).
+If we ever revisit baking it in, note SMB needs root to bind :445 and Windows
+refuses anonymous/guest logons (needs a username/password) — which is why the
+sidecar won out over an integrated server.
+
 GHCR publish on `v*.*.*` tags. Tags pushed: `vX.Y.Z` always, `latest` only on non-prerelease tags. Build multi-arch (`linux/amd64`, `linux/arm64`).
 
 ## Configuration

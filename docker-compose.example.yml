@@ -20,3 +20,32 @@ services:
     environment:
       - TZ=America/Los_Angeles
       - MAKETRACK_LOG_LEVEL=INFO
+
+  # ── Optional: share the model library over SMB ──────────────────────────────
+  # The model library is just a folder on disk (./maketrack-models), so you can
+  # add / edit / delete model files directly with whatever you like — a local
+  # file manager, rsync, Syncthing, an NFS export, etc. maketrack reconciles
+  # on-disk changes via its daily scan, the "Sync from disk" button on the Models
+  # page, and a scoped rescan whenever you open a model.
+  #
+  # If you'd rather mount it as a network drive from Mac, Windows, and Linux,
+  # uncomment this dockurr/samba sidecar. It serves the SAME ./maketrack-models
+  # directory over SMB and runs as its own container, so the maketrack app stays
+  # non-root. The default login is user `samba` / pass `secret` — change PASS.
+  # (Windows refuses anonymous/guest SMB, so it always needs a username/password;
+  # Mac and Linux can use these creds too, or you can mount as guest there.)
+  #
+  # samba:
+  #   image: dockurr/samba
+  #   container_name: maketrack-samba
+  #   restart: unless-stopped
+  #   environment:
+  #     - NAME=maketrack-models   # share name -> \\<host>\maketrack-models  (smb://<host>/maketrack-models)
+  #     - USER=samba              # default account
+  #     - PASS=secret             # CHANGE ME
+  #     - UID=1000                # write files as 1000:1000 so the maketrack
+  #     - GID=1000                #   container (and its disk scan) can read them
+  #   ports:
+  #     - "445:445"               # SMB
+  #   volumes:
+  #     - ./maketrack-models:/storage

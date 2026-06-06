@@ -79,6 +79,22 @@ services:
 Symptom if you skip this: startup fails with
 `sqlite3.OperationalError: unable to open database file`.
 
+### Editing the model library directly
+
+`./maketrack-models` is a plain folder (one subfolder per model, each with a
+`README.md` + `photos/` + `models/`). You can add, edit, or delete model files
+directly however you like — a local file manager, rsync, Syncthing, an NFS
+export, etc. maketrack reconciles on-disk changes via its daily scan, the
+**Sync from disk** button on the Models page, and a scoped rescan whenever you
+open a model.
+
+To mount it as a network drive from Mac, Windows, and Linux, uncomment the
+optional [`dockurr/samba`](https://github.com/dockur/samba) sidecar in
+`docker-compose.example.yml`. It serves the same `./maketrack-models` directory
+over SMB in its own container (the app container stays non-root). Default login
+is `samba` / `secret` — change it. Windows refuses anonymous SMB, so it always
+needs that login; Mac and Linux can use it too or mount as guest.
+
 ## License
 
 AGPL-3.0-or-later. See [`LICENSE`](./LICENSE).

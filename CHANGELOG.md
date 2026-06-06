@@ -21,6 +21,11 @@ All notable changes to this project will be documented here. Format roughly foll
   collapsed collections (by README name), each expanding to its `models/` tree
   with a per-file **+ Link** button, plus a name-filter. Only unlinked,
   printable files are offered (images hidden).
+- **Optional SMB share** for the model library, documented as a commented-out
+  [`dockurr/samba`](https://github.com/dockur/samba) sidecar in
+  `docker-compose.example.yml` (serves the same `./maketrack-models` dir, UID/GID
+  1000). Keeps the app image single-process and non-root; users who prefer can
+  edit the library directly on disk by any means.
 
 ### Fixed
 - Removed dead, broken lazy model-scan hook (`ensure_fresh_models` —
