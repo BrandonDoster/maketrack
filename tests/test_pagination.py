@@ -7,6 +7,9 @@ from tests.factories import (
     InventoryItemFactory,
     LocalFilamentFactory,
     add_model_asset,
+    link_model,
+    make_model,
+    make_project,
     persist,
 )
 
@@ -157,9 +160,9 @@ async def test_inventory_pagination_preserves_below_reorder(client: AsyncClient,
 # ── models ────────────────────────────────────────────────────────────────
 
 
-async def test_models_pagination(client: AsyncClient) -> None:
+async def test_models_pagination(client: AsyncClient, session) -> None:
     for i in range(55):
-        await client.post("/api/models", json={"name": f"Bracket-{i:03d}"})
+        await make_model(session, name=f"Bracket-{i:03d}")
 
     resp = await client.get("/models?view=details")
     # Page footer present + clickable Next.
@@ -168,15 +171,15 @@ async def test_models_pagination(client: AsyncClient) -> None:
 
 
 async def test_models_pagination_preserves_view_and_filter(
-    client: AsyncClient,
+    client: AsyncClient, session
 ) -> None:
     # 55 standalone library models + a project that owns one.
     for i in range(55):
-        await client.post("/api/models", json={"name": f"Library-{i:03d}"})
-    proj = (await client.post("/api/projects", json={"name": "P"})).json()["id"]
-    in_proj = (await client.post("/api/models", json={"name": "ProjPart"})).json()["id"]
-    asset_id = await add_model_asset(client, in_proj)
-    await client.post(f"/api/projects/{proj}/models", json={"model_asset_id": asset_id})
+        await make_model(session, name=f"Library-{i:03d}")
+    proj = (await make_project(session, name="P")).id
+    in_proj = (await make_model(session, name="ProjPart")).id
+    asset_id = await add_model_asset(session, in_proj)
+    await link_model(session, proj, asset_id)
 
     resp = await client.get("/models?view=details&hide_project_models=true&page=2")
     # The footer's prev/next preserve view + filter.
