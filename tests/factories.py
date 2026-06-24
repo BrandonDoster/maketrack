@@ -143,6 +143,23 @@ async def link_item(session: AsyncSession, project_id: int, **kw):
     return link
 
 
+async def upload_model_asset(
+    session: AsyncSession,
+    model_id: int,
+    filename: str = "part.stl",
+    *,
+    data: bytes | None = None,
+    set_as_thumbnail: bool = False,
+):
+    """Upload a small STL (or given bytes) and return the ModelAsset row."""
+    upload = UploadFile(file=io.BytesIO(data if data is not None else stl_bytes()), filename=filename)
+    asset = await asset_svc.upload_asset(
+        session, model_id, upload, set_as_thumbnail=set_as_thumbnail
+    )
+    await session.commit()
+    return asset
+
+
 async def add_model_asset(
     session: AsyncSession,
     model_id: int,
@@ -151,14 +168,12 @@ async def add_model_asset(
     data: bytes | None = None,
     set_as_thumbnail: bool = False,
 ) -> int:
-    """Upload a small STL (or given bytes) to a model and return the asset id.
+    """Upload a file and return just the asset id.
 
     Project links now target a specific ModelAsset, so a test that wants a
     model "in a project" must first give the model a file to link against.
     """
-    upload = UploadFile(file=io.BytesIO(data if data is not None else stl_bytes()), filename=filename)
-    asset = await asset_svc.upload_asset(
-        session, model_id, upload, set_as_thumbnail=set_as_thumbnail
+    asset = await upload_model_asset(
+        session, model_id, filename, data=data, set_as_thumbnail=set_as_thumbnail
     )
-    await session.commit()
     return asset.id
