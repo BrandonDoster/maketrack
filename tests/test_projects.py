@@ -1,12 +1,23 @@
+import pytest
+from pydantic import ValidationError
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from maketrack.schemas.project import ProjectCreate
+from maketrack.services import project_links as link_svc
+from maketrack.services import projects as project_svc
 from tests.factories import (
     InventoryItemFactory,
     LocalFilamentFactory,
     PrinterFactory,
     add_model_asset,
+    link_filament,
+    link_item,
+    link_model,
+    make_model,
+    make_project,
     persist,
+    update_project,
 )
 
 # ── UI: read/edit toggle and draft-create flow ────────────────────────────
@@ -29,9 +40,10 @@ async def test_new_project_button_creates_draft_in_edit_mode(client: AsyncClient
     assert "Delete project" in detail.text
 
 
-async def test_project_detail_read_mode_hides_edit_affordances(client: AsyncClient) -> None:
-    create = await client.post("/api/projects", json={"name": "P"})
-    pid = create.json()["id"]
+async def test_project_detail_read_mode_hides_edit_affordances(
+    client: AsyncClient, session: AsyncSession
+) -> None:
+    pid = (await make_project(session, name="P")).id
 
     read = await client.get(f"/projects/{pid}")
     # No basic-field inputs in read mode.
@@ -40,9 +52,10 @@ async def test_project_detail_read_mode_hides_edit_affordances(client: AsyncClie
     assert "Edit page" in read.text
 
 
-async def test_project_detail_edit_mode_reveals_form(client: AsyncClient) -> None:
-    create = await client.post("/api/projects", json={"name": "Editable"})
-    pid = create.json()["id"]
+async def test_project_detail_edit_mode_reveals_form(
+    client: AsyncClient, session: AsyncSession
+) -> None:
+    pid = (await make_project(session, name="Editable")).id
 
     edit = await client.get(f"/projects/{pid}?edit=true")
     assert 'value="Editable"' in edit.text
@@ -51,7 +64,9 @@ async def test_project_detail_edit_mode_reveals_form(client: AsyncClient) -> Non
     assert f'action="/projects/{pid}/photo/cover"' in edit.text
 
 
-async def test_done_editing_saves_and_exits_read_mode(client: AsyncClient) -> None:
+async def test_done_editing_saves_and_exits_read_mode(
+    client: AsyncClient, session: AsyncSession
+) -> None:
     create = await client.post("/projects/new", follow_redirects=False)
     pid = int(create.headers["location"].split("/")[2].split("?")[0])
 
@@ -71,12 +86,11 @@ async def test_done_editing_saves_and_exits_read_mode(client: AsyncClient) -> No
     # Exits to read mode.
     assert save.headers["location"] == f"/projects/{pid}"
 
-    api = await client.get(f"/api/projects/{pid}")
-    body = api.json()
-    assert body["name"] == "Voron Build"
-    assert body["status"] == "printing"
-    assert body["notes"] == "ordered the heatsets"
-    assert body["tags"] == ["voron", "build"]
+    saved = await project_svc.get_project(session, pid)
+    assert saved.name == "Voron Build"
+    assert saved.status == "printing"
+    assert saved.notes == "ordered the heatsets"
+    assert project_svc.decode_tags(saved.tags) == ["voron", "build"]
 
 
 async def test_add_to_bom_stays_in_edit_mode(client: AsyncClient) -> None:
@@ -102,131 +116,99 @@ async def test_old_project_form_routes_are_gone(client: AsyncClient) -> None:
     assert (await client.get(f"/projects/{pid}/edit")).status_code == 404
 
 
-async def test_create_project_minimal(client: AsyncClient) -> None:
-    resp = await client.post(
-        "/api/projects",
-        json={"name": "Voron 2.4 Build", "tags": ["voron", "build"]},
-    )
-    assert resp.status_code == 201, resp.text
-    body = resp.json()
-    assert body["name"] == "Voron 2.4 Build"
-    assert body["status"] == "planning"
-    assert body["tags"] == ["voron", "build"]
-    assert body["completed_at"] is None
+# ── service-level project behavior ────────────────────────────────────────
 
 
-async def test_status_done_stamps_completed_at(client: AsyncClient) -> None:
-    create = await client.post("/api/projects", json={"name": "P"})
-    pid = create.json()["id"]
-    patch = await client.patch(f"/api/projects/{pid}", json={"status": "done"})
-    assert patch.status_code == 200
-    assert patch.json()["status"] == "done"
-    assert patch.json()["completed_at"] is not None
+async def test_create_project_minimal(session: AsyncSession) -> None:
+    project = await make_project(session, name="Voron 2.4 Build", tags=["voron", "build"])
+    assert project.name == "Voron 2.4 Build"
+    assert project.status == "planning"
+    assert project_svc.decode_tags(project.tags) == ["voron", "build"]
+    assert project.completed_at is None
 
 
-async def test_status_back_to_planning_clears_completed_at(client: AsyncClient) -> None:
-    create = await client.post("/api/projects", json={"name": "P"})
-    pid = create.json()["id"]
-    await client.patch(f"/api/projects/{pid}", json={"status": "done"})
-    patch = await client.patch(f"/api/projects/{pid}", json={"status": "planning"})
-    assert patch.json()["completed_at"] is None
+async def test_status_done_stamps_completed_at(session: AsyncSession) -> None:
+    project = await make_project(session, name="P")
+    updated = await update_project(session, project.id, status="done")
+    assert updated.status == "done"
+    assert updated.completed_at is not None
 
 
-async def test_invalid_status_rejected(client: AsyncClient) -> None:
-    resp = await client.post("/api/projects", json={"name": "P", "status": "shipped"})
-    assert resp.status_code == 422
+async def test_status_back_to_planning_clears_completed_at(session: AsyncSession) -> None:
+    project = await make_project(session, name="P")
+    await update_project(session, project.id, status="done")
+    updated = await update_project(session, project.id, status="planning")
+    assert updated.completed_at is None
 
 
-async def test_list_filter_by_status(client: AsyncClient) -> None:
-    a = await client.post("/api/projects", json={"name": "Active"})
-    await client.patch(f"/api/projects/{a.json()['id']}", json={"status": "printing"})
-    await client.post("/api/projects", json={"name": "Idle"})
-
-    resp = await client.get("/api/projects?status=printing")
-    assert [p["name"] for p in resp.json()] == ["Active"]
+async def test_invalid_status_rejected() -> None:
+    with pytest.raises(ValidationError):
+        ProjectCreate(name="P", status="shipped")
 
 
-async def test_link_printer(client: AsyncClient, session: AsyncSession) -> None:
+async def test_list_filter_by_status(session: AsyncSession) -> None:
+    a = await make_project(session, name="Active")
+    await update_project(session, a.id, status="printing")
+    await make_project(session, name="Idle")
+
+    rows = await project_svc.list_projects(session, status="printing")
+    assert [p.name for p in rows] == ["Active"]
+
+
+async def test_link_printer(session: AsyncSession) -> None:
     p = await persist(session, PrinterFactory(name="Voron"))
     await session.commit()
 
-    create = await client.post("/api/projects", json={"name": "P", "printer_id": p.id})
-    assert create.status_code == 201
-    assert create.json()["printer_id"] == p.id
+    project = await make_project(session, name="P", printer_id=p.id)
+    assert project.printer_id == p.id
 
 
-async def test_add_model_link_idempotent(client: AsyncClient) -> None:
-    project = await client.post("/api/projects", json={"name": "P"})
-    pid = project.json()["id"]
-    model = await client.post("/api/models", json={"name": "M"})
-    mid = model.json()["id"]
-    aid = await add_model_asset(client, mid)
+async def test_add_model_link_idempotent(session: AsyncSession) -> None:
+    pid = (await make_project(session, name="P")).id
+    mid = (await make_model(session, name="M")).id
+    aid = await add_model_asset(session, mid)
 
-    first = await client.post(
-        f"/api/projects/{pid}/models",
-        json={"model_asset_id": aid, "qty_to_print": 2},
-    )
-    assert first.status_code == 201
-
-    # Re-link with different qty — should not 409 on the composite PK; the
+    await link_model(session, pid, aid, qty_to_print=2)
+    # Re-link with different qty — should not violate the composite PK; the
     # service treats it as an upsert.
-    second = await client.post(
-        f"/api/projects/{pid}/models",
-        json={"model_asset_id": aid, "qty_to_print": 5},
-    )
-    assert second.status_code == 201
-    listing = await client.get(f"/api/projects/{pid}/models")
-    assert len(listing.json()) == 1
-    assert listing.json()[0]["qty_to_print"] == 5
+    await link_model(session, pid, aid, qty_to_print=5)
+
+    links = await link_svc.list_project_models(session, pid)
+    assert len(links) == 1
+    assert links[0].link.qty_to_print == 5
 
 
-async def test_remove_model_link(client: AsyncClient) -> None:
-    project = await client.post("/api/projects", json={"name": "P"})
-    pid = project.json()["id"]
-    model = await client.post("/api/models", json={"name": "M"})
-    mid = model.json()["id"]
-    aid = await add_model_asset(client, mid)
-    await client.post(f"/api/projects/{pid}/models", json={"model_asset_id": aid})
+async def test_remove_model_link(session: AsyncSession) -> None:
+    pid = (await make_project(session, name="P")).id
+    mid = (await make_model(session, name="M")).id
+    aid = await add_model_asset(session, mid)
+    await link_model(session, pid, aid)
 
-    delete = await client.delete(f"/api/projects/{pid}/models/{aid}")
-    assert delete.status_code == 204
-    listing = await client.get(f"/api/projects/{pid}/models")
-    assert listing.json() == []
+    await link_svc.remove_model(session, pid, aid)
+    await session.commit()
+    assert await link_svc.list_project_models(session, pid) == []
 
 
-async def test_filament_link_round_trip(client: AsyncClient, session: AsyncSession) -> None:
+async def test_filament_link_round_trip(session: AsyncSession) -> None:
     f = await persist(session, LocalFilamentFactory(name="PLA Black"))
     await session.commit()
+    pid = (await make_project(session, name="P")).id
 
-    project = await client.post("/api/projects", json={"name": "P"})
-    pid = project.json()["id"]
+    link = await link_filament(session, pid, f.id, est_weight_g=250, role="extruder_0")
 
-    add = await client.post(
-        f"/api/projects/{pid}/filaments",
-        json={"filament_id": f.id, "est_weight_g": 250, "role": "extruder_0"},
-    )
-    assert add.status_code == 201
-    link_id = add.json()["id"]
+    links = await link_svc.list_project_filaments(session, pid)
+    assert len(links) == 1
+    assert links[0].link.role == "extruder_0"
 
-    listing = await client.get(f"/api/projects/{pid}/filaments")
-    assert len(listing.json()) == 1
-    assert listing.json()[0]["role"] == "extruder_0"
-
-    delete = await client.delete(f"/api/projects/{pid}/filaments/{link_id}")
-    assert delete.status_code == 204
-    assert (await client.get(f"/api/projects/{pid}/filaments")).json() == []
+    await link_svc.remove_filament(session, link.id)
+    await session.commit()
+    assert await link_svc.list_project_filaments(session, pid) == []
 
 
-async def test_item_link_decimal_qty(client: AsyncClient, session: AsyncSession) -> None:
+async def test_item_link_decimal_qty(session: AsyncSession) -> None:
     item = await persist(session, InventoryItemFactory(name="XT60 wire", quantity=2, unit="m"))
     await session.commit()
+    pid = (await make_project(session, name="P")).id
 
-    project = await client.post("/api/projects", json={"name": "P"})
-    pid = project.json()["id"]
-
-    add = await client.post(
-        f"/api/projects/{pid}/items",
-        json={"inventory_item_id": item.id, "qty_required": 1.5},
-    )
-    assert add.status_code == 201
-    assert add.json()["qty_required"] == 1.5
+    link = await link_item(session, pid, inventory_item_id=item.id, qty_required=1.5)
+    assert link.qty_required == 1.5
