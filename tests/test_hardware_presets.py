@@ -4,6 +4,9 @@ import json
 from pathlib import Path
 
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from tests.factories import make_project
 
 PRESETS_PATH = (
     Path(__file__).resolve().parent.parent
@@ -56,10 +59,9 @@ async def test_inventory_form_marks_name_input(client: AsyncClient) -> None:
 
 
 async def test_bom_entry_row_has_autocomplete_and_hidden_unit(
-    client: AsyncClient,
+    client: AsyncClient, session: AsyncSession
 ) -> None:
-    project = await client.post("/api/projects", json={"name": "P"})
-    pid = project.json()["id"]
+    pid = (await make_project(session, name="P")).id
     # The BOM entry row is an edit affordance, so it only renders in edit mode.
     resp = await client.get(f"/projects/{pid}?edit=true")
     assert resp.status_code == 200
