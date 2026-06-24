@@ -1,48 +1,53 @@
+import pytest
 from httpx import AsyncClient
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from maketrack.errors import NotFoundError
+from maketrack.schemas.printer import PrinterCreate, PrinterUpdate
+from maketrack.services import printers as printer_svc
 from tests.factories import PrinterFactory, persist
 
 
-async def test_create_printer(client: AsyncClient) -> None:
-    resp = await client.post(
-        "/api/printers",
-        json={
-            "name": "Voron 2.4 350",
-            "model": "Voron 2.4 350mm",
-            "access_url": "http://voron.local",
-        },
+async def test_create_printer(session: AsyncSession) -> None:
+    printer = await printer_svc.create_printer(
+        session,
+        PrinterCreate(
+            name="Voron 2.4 350",
+            model="Voron 2.4 350mm",
+            access_url="http://voron.local",
+        ),
     )
-    assert resp.status_code == 201, resp.text
-    body = resp.json()
-    assert body["name"] == "Voron 2.4 350"
+    await session.commit()
+    assert printer.name == "Voron 2.4 350"
 
 
-async def test_list_printers(client: AsyncClient, session: AsyncSession) -> None:
+async def test_list_printers(session: AsyncSession) -> None:
     await persist(session, PrinterFactory(name="A"))
     await persist(session, PrinterFactory(name="B"))
     await session.commit()
 
-    resp = await client.get("/api/printers")
-    assert resp.status_code == 200
-    assert len(resp.json()) == 2
+    rows = await printer_svc.list_printers(session)
+    assert len(rows) == 2
 
 
-async def test_update_and_delete_printer(client: AsyncClient, session: AsyncSession) -> None:
+async def test_update_and_delete_printer(session: AsyncSession) -> None:
     p = await persist(session, PrinterFactory())
     await session.commit()
 
-    patch = await client.patch(f"/api/printers/{p.id}", json={"notes": "updated"})
-    assert patch.status_code == 200
-    assert patch.json()["notes"] == "updated"
+    updated = await printer_svc.update_printer(session, p.id, PrinterUpdate(notes="updated"))
+    await session.commit()
+    assert updated.notes == "updated"
 
-    delete = await client.delete(f"/api/printers/{p.id}")
-    assert delete.status_code == 204
+    await printer_svc.delete_printer(session, p.id)
+    await session.commit()
+    with pytest.raises(NotFoundError):
+        await printer_svc.get_printer(session, p.id)
 
 
-async def test_empty_name_rejected(client: AsyncClient) -> None:
-    resp = await client.post("/api/printers", json={"name": ""})
-    assert resp.status_code == 422
+async def test_empty_name_rejected() -> None:
+    with pytest.raises(ValidationError):
+        PrinterCreate(name="")
 
 
 async def test_printers_list_renders(client: AsyncClient, session: AsyncSession) -> None:
@@ -75,7 +80,7 @@ async def test_new_printer_button_creates_draft_and_redirects_to_edit(
     assert "Delete printer" in detail.text
 
 
-async def test_done_editing_saves_and_exits(client: AsyncClient) -> None:
+async def test_done_editing_saves_and_exits(client: AsyncClient, session: AsyncSession) -> None:
     """Clicking Done editing (the submit button of the basic-fields
     form) saves the fields AND redirects out of edit mode."""
     create = await client.post("/printers/new", follow_redirects=False)
@@ -90,10 +95,9 @@ async def test_done_editing_saves_and_exits(client: AsyncClient) -> None:
     # Exits edit mode now.
     assert save.headers["location"] == f"/printers/{pid}"
 
-    api = await client.get(f"/api/printers/{pid}")
-    body = api.json()
-    assert body["name"] == "Voron 2.4"
-    assert body["model"] == "Voron 2.4 350"
+    saved = await printer_svc.get_printer(session, pid)
+    assert saved.name == "Voron 2.4"
+    assert saved.model == "Voron 2.4 350"
 
 
 async def test_inline_edit_validation_re_renders_in_edit_mode(client: AsyncClient) -> None:
@@ -121,7 +125,9 @@ async def test_done_editing_and_delete_buttons_wire_to_forms(client: AsyncClient
     assert 'id="printer-delete-form"' in edit.text
 
 
-async def test_delete_button_in_edit_mode_works(client: AsyncClient) -> None:
+async def test_delete_button_in_edit_mode_works(
+    client: AsyncClient, session: AsyncSession
+) -> None:
     create = await client.post("/printers/new", follow_redirects=False)
     pid = int(create.headers["location"].split("/")[2].split("?")[0])
 
@@ -129,8 +135,8 @@ async def test_delete_button_in_edit_mode_works(client: AsyncClient) -> None:
     assert resp.status_code == 303
     assert resp.headers["location"] == "/printers"
 
-    gone = await client.get(f"/api/printers/{pid}")
-    assert gone.status_code == 404
+    with pytest.raises(NotFoundError):
+        await printer_svc.get_printer(session, pid)
 
 
 async def test_old_form_routes_are_gone(client: AsyncClient) -> None:
