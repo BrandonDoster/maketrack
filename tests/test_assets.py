@@ -1,10 +1,16 @@
 import io
 import zipfile
 
+import pytest
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from maketrack.services import assets as asset_svc
+from maketrack.services import models as model_svc
 from maketrack.services.assets import asset_type_from_filename
 from maketrack.services.three_mf import extract_thumbnail
+from maketrack.services.uploads import UploadError
+from tests.factories import make_model, upload_model_asset
 
 _PNG = (
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
@@ -64,90 +70,56 @@ def test_extract_thumbnail_handles_bad_zip(tmp_path) -> None:
     assert extract_thumbnail(p) is None
 
 
-async def test_upload_stl_creates_asset(client: AsyncClient) -> None:
-    create = await client.post("/api/models", json={"name": "STL Test"})
-    mid = create.json()["id"]
+async def test_upload_stl_creates_asset(session: AsyncSession) -> None:
+    mid = (await make_model(session, name="STL Test")).id
 
-    resp = await client.post(
-        f"/api/models/{mid}/assets",
-        files={
-            "file": ("widget.stl", io.BytesIO(_binary_stl_bytes()), "model/stl"),
-        },
-    )
-    assert resp.status_code == 201, resp.text
-    body = resp.json()
-    assert body["asset_type"] == "stl"
-    assert body["filename"] == "widget.stl"
-    assert body["file_size"] == 84
+    asset = await upload_model_asset(session, mid, "widget.stl", data=_binary_stl_bytes())
+    assert asset.asset_type == "stl"
+    assert asset.filename == "widget.stl"
+    assert asset.file_size == 84
 
 
-async def test_upload_3mf_extracts_thumbnail_and_auto_sets_it(
-    client: AsyncClient,
-) -> None:
-    create = await client.post("/api/models", json={"name": "3MF Test"})
-    mid = create.json()["id"]
+async def test_upload_3mf_extracts_thumbnail_and_auto_sets_it(session: AsyncSession) -> None:
+    mid = (await make_model(session, name="3MF Test")).id
 
-    resp = await client.post(
-        f"/api/models/{mid}/assets",
-        files={"file": ("plate.3mf", io.BytesIO(_build_3mf()), "model/3mf")},
-    )
-    assert resp.status_code == 201
+    await upload_model_asset(session, mid, "plate.3mf", data=_build_3mf())
 
-    listing = await client.get(f"/api/models/{mid}/assets")
-    rows = listing.json()
+    rows = await asset_svc.list_for_model(session, mid)
     assert len(rows) == 2  # the 3mf + the extracted thumbnail
-    types = {r["asset_type"] for r in rows}
+    types = {r.asset_type for r in rows}
     assert types == {"3mf", "image"}
-    generated = [r for r in rows if r["generated"]]
+    generated = [r for r in rows if r.generated]
     assert len(generated) == 1
-    assert generated[0]["asset_type"] == "image"
+    assert generated[0].asset_type == "image"
 
-    model = (await client.get(f"/api/models/{mid}")).json()
-    assert model["thumbnail_filename"] == generated[0]["filename"]
+    model = await model_svc.get_model(session, mid)
+    assert model.thumbnail_filename == generated[0].filename
 
 
-async def test_upload_image_auto_sets_thumbnail_when_none(client: AsyncClient) -> None:
-    create = await client.post("/api/models", json={"name": "Img Test"})
-    mid = create.json()["id"]
+async def test_upload_image_auto_sets_thumbnail_when_none(session: AsyncSession) -> None:
+    mid = (await make_model(session, name="Img Test")).id
 
-    resp = await client.post(
-        f"/api/models/{mid}/assets",
-        files={"file": ("hero.png", io.BytesIO(_PNG), "image/png")},
+    asset = await upload_model_asset(session, mid, "hero.png", data=_PNG)
+
+    model = await model_svc.get_model(session, mid)
+    assert model.thumbnail_filename == asset.filename
+
+
+async def test_set_thumbnail_rejects_non_image(session: AsyncSession) -> None:
+    mid = (await make_model(session, name="T")).id
+    asset = await upload_model_asset(session, mid, "a.stl", data=_binary_stl_bytes())
+
+    with pytest.raises(UploadError):
+        await asset_svc.set_thumbnail(session, mid, asset.id)
+
+
+async def test_download_uses_original_filename(client: AsyncClient, session: AsyncSession) -> None:
+    mid = (await make_model(session, name="DL")).id
+    asset = await upload_model_asset(
+        session, mid, "My Cool Bracket v2.stl", data=_binary_stl_bytes()
     )
-    assert resp.status_code == 201
-    filename = resp.json()["filename"]
 
-    model = (await client.get(f"/api/models/{mid}")).json()
-    assert model["thumbnail_filename"] == filename
-
-
-async def test_set_thumbnail_rejects_non_image(client: AsyncClient) -> None:
-    create = await client.post("/api/models", json={"name": "T"})
-    mid = create.json()["id"]
-
-    upload = await client.post(
-        f"/api/models/{mid}/assets",
-        files={"file": ("a.stl", io.BytesIO(_binary_stl_bytes()), "model/stl")},
-    )
-    asset_id = upload.json()["id"]
-
-    resp = await client.post(
-        f"/api/models/{mid}/thumbnail",
-        json={"asset_id": asset_id},
-    )
-    assert resp.status_code == 400
-
-
-async def test_download_uses_original_filename(client: AsyncClient) -> None:
-    create = await client.post("/api/models", json={"name": "DL"})
-    mid = create.json()["id"]
-    upload = await client.post(
-        f"/api/models/{mid}/assets",
-        files={"file": ("My Cool Bracket v2.stl", io.BytesIO(_binary_stl_bytes()), "model/stl")},
-    )
-    asset_id = upload.json()["id"]
-
-    resp = await client.get(f"/assets/{asset_id}/download")
+    resp = await client.get(f"/assets/{asset.id}/download")
     assert resp.status_code == 200
     cd = resp.headers.get("content-disposition", "")
     # Starlette URL-encodes filename* when it contains anything outside
@@ -156,37 +128,26 @@ async def test_download_uses_original_filename(client: AsyncClient) -> None:
     assert "attachment" in cd
 
 
-async def test_delete_asset_clears_thumbnail(client: AsyncClient) -> None:
-    create = await client.post("/api/models", json={"name": "X"})
-    mid = create.json()["id"]
-    upload = await client.post(
-        f"/api/models/{mid}/assets",
-        files={"file": ("hero.png", io.BytesIO(_PNG), "image/png")},
-    )
-    asset_id = upload.json()["id"]
-    filename = upload.json()["filename"]
+async def test_delete_asset_clears_thumbnail(session: AsyncSession) -> None:
+    mid = (await make_model(session, name="X")).id
+    asset = await upload_model_asset(session, mid, "hero.png", data=_PNG)
 
-    model_before = (await client.get(f"/api/models/{mid}")).json()
-    assert model_before["thumbnail_filename"] == filename
+    model_before = await model_svc.get_model(session, mid)
+    assert model_before.thumbnail_filename == asset.filename
 
-    delete = await client.delete(f"/api/assets/{asset_id}")
-    assert delete.status_code == 204
+    await asset_svc.delete_asset(session, asset.id)
+    await session.commit()
 
-    model_after = (await client.get(f"/api/models/{mid}")).json()
-    assert model_after["thumbnail_filename"] is None
+    model_after = await model_svc.get_model(session, mid)
+    assert model_after.thumbnail_filename is None
 
 
-async def test_delete_model_cascades_assets(client: AsyncClient) -> None:
-    create = await client.post("/api/models", json={"name": "C"})
-    mid = create.json()["id"]
-    await client.post(
-        f"/api/models/{mid}/assets",
-        files={"file": ("a.stl", io.BytesIO(_binary_stl_bytes()), "model/stl")},
-    )
+async def test_delete_model_cascades_assets(session: AsyncSession) -> None:
+    mid = (await make_model(session, name="C")).id
+    await upload_model_asset(session, mid, "a.stl", data=_binary_stl_bytes())
 
-    resp = await client.delete(f"/api/models/{mid}")
-    assert resp.status_code == 204
+    await model_svc.delete_model(session, mid)
+    await session.commit()
 
-    listing = await client.get(f"/api/models/{mid}/assets")
-    # Listing returns [] because the model is gone — model_id matches no rows.
-    assert listing.json() == []
+    # Cascade dropped the asset rows along with the model.
+    assert await asset_svc.list_for_model(session, mid) == []

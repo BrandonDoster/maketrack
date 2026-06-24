@@ -6,7 +6,10 @@ from tests.factories import (
     InventoryItemFactory,
     LocalFilamentFactory,
     PrinterFactory,
+    make_model,
+    make_project,
     persist,
+    update_project,
 )
 
 # ── filaments ─────────────────────────────────────────────────────────────
@@ -107,21 +110,21 @@ async def test_printers_empty_state_with_query(client: AsyncClient) -> None:
 # ── projects ──────────────────────────────────────────────────────────────
 
 
-async def test_projects_search(client: AsyncClient) -> None:
-    await client.post("/api/projects", json={"name": "Voron Build"})
-    await client.post("/api/projects", json={"name": "Bambu Mod"})
+async def test_projects_search(client: AsyncClient, session) -> None:
+    await make_project(session, name="Voron Build")
+    await make_project(session, name="Bambu Mod")
 
     resp = await client.get("/projects?q=voron")
     assert "Voron Build" in resp.text
     assert "Bambu Mod" not in resp.text
 
 
-async def test_projects_search_preserves_status_filter(client: AsyncClient) -> None:
+async def test_projects_search_preserves_status_filter(client: AsyncClient, session) -> None:
     """Status chips link with the current ?q= preserved, and the search form
     keeps the status as a hidden input."""
-    a = await client.post("/api/projects", json={"name": "Active Voron"})
-    await client.patch(f"/api/projects/{a.json()['id']}", json={"status": "printing"})
-    await client.post("/api/projects", json={"name": "Idle Voron"})
+    a = await make_project(session, name="Active Voron")
+    await update_project(session, a.id, status="printing")
+    await make_project(session, name="Idle Voron")
 
     resp = await client.get("/projects?status=printing&q=voron")
     assert "Active Voron" in resp.text
@@ -133,18 +136,18 @@ async def test_projects_search_preserves_status_filter(client: AsyncClient) -> N
 # ── models ────────────────────────────────────────────────────────────────
 
 
-async def test_models_search(client: AsyncClient) -> None:
-    await client.post("/api/models", json={"name": "Voron Filter Mount"})
-    await client.post("/api/models", json={"name": "Y-Belt Tensioner"})
+async def test_models_search(client: AsyncClient, session) -> None:
+    await make_model(session, name="Voron Filter Mount")
+    await make_model(session, name="Y-Belt Tensioner")
 
     resp = await client.get("/models?q=voron")
     assert "Voron Filter Mount" in resp.text
     assert "Y-Belt Tensioner" not in resp.text
 
 
-async def test_models_search_preserves_view_and_filter(client: AsyncClient) -> None:
+async def test_models_search_preserves_view_and_filter(client: AsyncClient, session) -> None:
     """The view-switch links and toolbar should keep the search query."""
-    await client.post("/api/models", json={"name": "Heroic Bracket"})
+    await make_model(session, name="Heroic Bracket")
 
     resp = await client.get("/models?view=details&q=heroic")
     # View links propagate q

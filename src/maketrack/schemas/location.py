@@ -1,6 +1,4 @@
-from datetime import datetime
-
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 LOCATION_KINDS = ("bin", "shelf", "drawer", "other")
 _KIND_PATTERN = r"^(bin|shelf|drawer|other)$"
@@ -18,13 +16,3 @@ class LocationCreate(LocationBase):
 class LocationUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     kind: str | None = Field(default=None, pattern=_KIND_PATTERN)
-
-
-class LocationRead(LocationBase):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    parent_id: int | None = None
-    qr_code: str | None = None
-    created_at: datetime
-    updated_at: datetime

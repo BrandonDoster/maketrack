@@ -1,39 +1,42 @@
+import pytest
 from httpx import AsyncClient
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from maketrack.schemas.external_source import ExternalSourceCreate
+from maketrack.services import external_sources as source_svc
 from tests.factories import SpoolmanSourceFactory, persist
 
 
-async def test_create_source_via_api(client: AsyncClient) -> None:
-    resp = await client.post(
-        "/api/sources",
-        json={
-            "type": "spoolman",
-            "name": "home",
-            "base_url": "http://localhost:7912",
-            "ttl_seconds": 3600,
-            "enabled": True,
-        },
+async def test_create_source(session: AsyncSession) -> None:
+    src = await source_svc.create_source(
+        session,
+        ExternalSourceCreate(
+            type="spoolman",
+            name="home",
+            base_url="http://localhost:7912",
+            ttl_seconds=3600,
+            enabled=True,
+        ),
     )
-    assert resp.status_code == 201, resp.text
-    body = resp.json()
-    assert body["type"] == "spoolman"
-    assert body["enabled"] is True
+    await session.commit()
+    assert src.type == "spoolman"
+    assert src.enabled is True
 
 
-async def test_list_sources(client: AsyncClient, session: AsyncSession) -> None:
+async def test_list_sources(session: AsyncSession) -> None:
     await persist(session, SpoolmanSourceFactory(name="a"))
     await persist(session, SpoolmanSourceFactory(name="b"))
     await session.commit()
 
-    resp = await client.get("/api/sources")
-    assert resp.status_code == 200
-    assert len(resp.json()) == 2
+    assert len(await source_svc.list_sources(session)) == 2
 
 
 async def test_disable_source_archives_filaments(
     client: AsyncClient, session: AsyncSession
 ) -> None:
+    """Disabling a source through the settings form archives its filaments
+    (the disable→archive orchestration lives in the UI route)."""
     src = await persist(session, SpoolmanSourceFactory())
     from maketrack.models.filament import Filament
 
@@ -41,16 +44,18 @@ async def test_disable_source_archives_filaments(
     session.add(f)
     await session.commit()
 
-    resp = await client.patch(f"/api/sources/{src.id}", json={"enabled": False})
-    assert resp.status_code == 200
+    # Posting the edit form without the `enabled` checkbox disables it.
+    resp = await client.post(
+        f"/settings/sources/{src.id}",
+        data={"name": src.name},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
 
     await session.refresh(f)
     assert f.archived_at is not None
 
 
-async def test_invalid_source_type_rejected(client: AsyncClient) -> None:
-    resp = await client.post(
-        "/api/sources",
-        json={"type": "octoprint", "name": "x"},
-    )
-    assert resp.status_code == 422
+async def test_invalid_source_type_rejected() -> None:
+    with pytest.raises(ValidationError):
+        ExternalSourceCreate(type="octoprint", name="x")

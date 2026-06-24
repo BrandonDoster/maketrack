@@ -14,17 +14,8 @@ from maketrack.db import get_engine, get_sessionmaker
 from maketrack.errors import NotFoundError, RemoteFilamentError
 from maketrack.logging import configure_logging
 from maketrack.migrations import upgrade_to_head
-from maketrack.routes.assets import router as api_assets_router
-from maketrack.routes.external_sources import router as api_sources_router
-from maketrack.routes.filaments import router as api_filaments_router
-from maketrack.routes.inventory import router as api_inventory_router
-from maketrack.routes.locations import router as api_locations_router
+from maketrack.routes.assets import router as assets_download_router
 from maketrack.routes.media import router as media_router
-from maketrack.routes.models import router as api_models_router
-from maketrack.routes.printer_builds import router as api_printer_builds_router
-from maketrack.routes.printers import router as api_printers_router
-from maketrack.routes.projects import router as api_projects_router
-from maketrack.routes.shopping import router as api_shopping_router
 from maketrack.routes.ui.dashboard import router as ui_dashboard_router
 from maketrack.routes.ui.filaments import router as ui_filaments_router
 from maketrack.routes.ui.inventory import router as ui_inventory_router
@@ -135,16 +126,7 @@ def create_app() -> FastAPI:
         )
 
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-    app.include_router(api_filaments_router)
-    app.include_router(api_sources_router)
-    app.include_router(api_inventory_router)
-    app.include_router(api_locations_router)
-    app.include_router(api_printers_router)
-    app.include_router(api_printer_builds_router)
-    app.include_router(api_models_router)
-    app.include_router(api_assets_router)
-    app.include_router(api_projects_router)
-    app.include_router(api_shopping_router)
+    app.include_router(assets_download_router)
     app.include_router(media_router)
     app.include_router(ui_dashboard_router)
     app.include_router(ui_filaments_router)

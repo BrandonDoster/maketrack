@@ -1,44 +1,42 @@
 import io
 from pathlib import Path
 
+import pytest
 from httpx import AsyncClient
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from maketrack.config import get_settings
-from tests.factories import InventoryItemFactory, persist
+from maketrack.schemas.inventory import InventoryItemCreate
+from maketrack.schemas.location import LocationCreate
+from maketrack.services import inventory as inventory_svc
+from maketrack.services import locations as location_svc
+from tests.factories import InventoryItemFactory, make_inventory_item, persist
 
 
-async def test_quantity_accepts_decimal_via_api(client: AsyncClient) -> None:
-    resp = await client.post(
-        "/api/inventory",
-        json={"name": "XT60 wire", "unit": "m", "quantity": 1.5},
+async def test_quantity_accepts_decimal(session: AsyncSession) -> None:
+    item = await inventory_svc.create_item(
+        session, InventoryItemCreate(name="XT60 wire", unit="m", quantity=1.5)
     )
-    assert resp.status_code == 201, resp.text
-    assert resp.json()["quantity"] == 1.5
+    await session.commit()
+    assert item.quantity == 1.5
 
 
-async def test_quantity_rejects_negative(client: AsyncClient) -> None:
-    resp = await client.post(
-        "/api/inventory",
-        json={"name": "x", "quantity": -0.5},
-    )
-    assert resp.status_code == 422
+async def test_quantity_rejects_negative() -> None:
+    with pytest.raises(ValidationError):
+        InventoryItemCreate(name="x", quantity=-0.5)
 
 
-async def test_location_fk_round_trips(client: AsyncClient) -> None:
-    loc = await client.post("/api/locations", json={"name": "Bin A3", "kind": "bin"})
-    assert loc.status_code == 201, loc.text
-    location_id = loc.json()["id"]
+async def test_location_fk_round_trips(session: AsyncSession) -> None:
+    loc = await location_svc.create_location(session, LocationCreate(name="Bin A3", kind="bin"))
+    await session.commit()
 
-    resp = await client.post(
-        "/api/inventory",
-        json={"name": "M3 Heatsets", "location_id": location_id, "quantity": 50},
-    )
-    assert resp.status_code == 201, resp.text
-    body = resp.json()
-    assert body["location_id"] == location_id
-    assert body["location"]["name"] == "Bin A3"
-    assert body["location"]["kind"] == "bin"
+    item = await make_inventory_item(session, name="M3 Heatsets", location_id=loc.id, quantity=50)
+    assert item.location_id == loc.id
+
+    stored_loc = await location_svc.get_location(session, item.location_id)
+    assert stored_loc.name == "Bin A3"
+    assert stored_loc.kind == "bin"
 
 
 _PNG_1X1 = (
