@@ -6,7 +6,6 @@ from httpx import AsyncClient
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from maketrack.errors import NotFoundError
 from maketrack.schemas.location import LocationCreate, LocationUpdate
 from maketrack.services import inventory as inventory_svc
 from maketrack.services import locations as location_svc
@@ -82,7 +81,9 @@ async def test_locations_settings_create_redirects(client: AsyncClient) -> None:
     assert "Shelf 9" in page.text
 
 
-async def test_locations_settings_edit_then_save(client: AsyncClient, session: AsyncSession) -> None:
+async def test_locations_settings_edit_then_save(
+    client: AsyncClient, session: AsyncSession
+) -> None:
     lid = await _create(session, "Bin Z1")
 
     edit_page = await client.get(f"/settings/locations/{lid}/edit")

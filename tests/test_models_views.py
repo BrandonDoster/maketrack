@@ -21,7 +21,9 @@ async def _make_models(session: AsyncSession) -> tuple[int, int, int]:
     return standalone, in_proj_a, in_proj_b
 
 
-async def test_models_list_default_view_is_cards(client: AsyncClient, session: AsyncSession) -> None:
+async def test_models_list_default_view_is_cards(
+    client: AsyncClient, session: AsyncSession
+) -> None:
     await _make_models(session)
     resp = await client.get("/models")
     assert resp.status_code == 200

@@ -152,7 +152,9 @@ async def upload_model_asset(
     set_as_thumbnail: bool = False,
 ):
     """Upload a small STL (or given bytes) and return the ModelAsset row."""
-    upload = UploadFile(file=io.BytesIO(data if data is not None else stl_bytes()), filename=filename)
+    upload = UploadFile(
+        file=io.BytesIO(data if data is not None else stl_bytes()), filename=filename
+    )
     asset = await asset_svc.upload_asset(
         session, model_id, upload, set_as_thumbnail=set_as_thumbnail
     )

@@ -58,7 +58,9 @@ async def test_invalid_source_type_rejected() -> None:
 async def test_update_model(session: AsyncSession) -> None:
     model = await make_model(session, name="Original")
 
-    updated = await model_svc.update_model(session, model.id, ModelUpdate(name="Renamed", tags=["x"]))
+    updated = await model_svc.update_model(
+        session, model.id, ModelUpdate(name="Renamed", tags=["x"])
+    )
     await session.commit()
     assert updated.name == "Renamed"
     assert decode_tags(updated.tags) == ["x"]

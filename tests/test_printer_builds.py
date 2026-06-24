@@ -51,7 +51,9 @@ async def _make_build(session: AsyncSession, printer_id: int, **kw) -> int:
     return build.id
 
 
-async def _link_model(session: AsyncSession, build_id: int, model_id: int, qty: int = 1, notes=None):
+async def _link_model(
+    session: AsyncSession, build_id: int, model_id: int, qty: int = 1, notes=None
+):
     link = await build_svc.add_model(
         session,
         build_id=build_id,
@@ -386,9 +388,7 @@ async def test_ui_empty_form_is_a_noop(client: AsyncClient, session: AsyncSessio
     assert await _list_builds(session, pid) == []
 
 
-async def test_ui_build_photo_upload_and_remove(
-    client: AsyncClient, session: AsyncSession
-) -> None:
+async def test_ui_build_photo_upload_and_remove(client: AsyncClient, session: AsyncSession) -> None:
     pid = await _new_printer(session)
     create = await client.post(
         f"/printers/{pid}/builds",
@@ -421,9 +421,7 @@ async def test_ui_build_photo_upload_and_remove(
     assert "/media/printers/builds/" not in detail.text
 
 
-async def test_delete_build_stays_in_edit_mode(
-    client: AsyncClient, session: AsyncSession
-) -> None:
+async def test_delete_build_stays_in_edit_mode(client: AsyncClient, session: AsyncSession) -> None:
     pid = await _new_printer(session)
     build_id = await _make_build(session, pid, name="x")
 
@@ -474,9 +472,7 @@ async def test_photo_upload_and_remove_stay_in_edit_mode(
     assert remove.headers["location"] == f"/printers/{pid}?edit=true"
 
 
-async def test_deleting_printer_cascades_builds(
-    client: AsyncClient, session: AsyncSession
-) -> None:
+async def test_deleting_printer_cascades_builds(client: AsyncClient, session: AsyncSession) -> None:
     pid = await _new_printer(session)
     mid = await _new_model(session, "duct")
     build_id = await _make_build(session, pid, name="x")

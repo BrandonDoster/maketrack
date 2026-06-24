@@ -125,9 +125,7 @@ async def test_done_editing_and_delete_buttons_wire_to_forms(client: AsyncClient
     assert 'id="printer-delete-form"' in edit.text
 
 
-async def test_delete_button_in_edit_mode_works(
-    client: AsyncClient, session: AsyncSession
-) -> None:
+async def test_delete_button_in_edit_mode_works(client: AsyncClient, session: AsyncSession) -> None:
     create = await client.post("/printers/new", follow_redirects=False)
     pid = int(create.headers["location"].split("/")[2].split("?")[0])
 

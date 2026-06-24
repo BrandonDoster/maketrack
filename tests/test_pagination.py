@@ -170,9 +170,7 @@ async def test_models_pagination(client: AsyncClient, session) -> None:
     assert "page=2" in resp.text
 
 
-async def test_models_pagination_preserves_view_and_filter(
-    client: AsyncClient, session
-) -> None:
+async def test_models_pagination_preserves_view_and_filter(client: AsyncClient, session) -> None:
     # 55 standalone library models + a project that owns one.
     for i in range(55):
         await make_model(session, name=f"Library-{i:03d}")

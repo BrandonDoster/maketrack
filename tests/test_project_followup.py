@@ -194,9 +194,7 @@ async def test_unknown_photo_kind_is_a_noop(client: AsyncClient, session: AsyncS
 # ── M6 polish: cover photo on list, inline qty, inline notes ──────────────
 
 
-async def test_project_list_renders_cover_photo(
-    client: AsyncClient, session: AsyncSession
-) -> None:
+async def test_project_list_renders_cover_photo(client: AsyncClient, session: AsyncSession) -> None:
     pid = (await make_project(session, name="Cover Test")).id
     await client.post(
         f"/projects/{pid}/photo/cover",
@@ -263,9 +261,7 @@ async def test_inline_qty_invalid_input_is_ignored(
     assert bom[0].still_needed_for_project == 10  # unchanged
 
 
-async def test_notes_save_via_basic_fields_form(
-    client: AsyncClient, session: AsyncSession
-) -> None:
+async def test_notes_save_via_basic_fields_form(client: AsyncClient, session: AsyncSession) -> None:
     """Notes are saved as part of the basic-fields form on the detail
     page (clicking Done editing); the standalone /notes endpoint is
     gone in favor of one consolidated save."""
@@ -319,9 +315,7 @@ async def test_edit_form_clears_description(client: AsyncClient, session: AsyncS
     assert fetched.description is None
 
 
-async def test_edit_mode_renders_notes_textarea(
-    client: AsyncClient, session: AsyncSession
-) -> None:
+async def test_edit_mode_renders_notes_textarea(client: AsyncClient, session: AsyncSession) -> None:
     """Notes lives inside the basic-fields form on the detail page in
     edit mode — it commits with everything else on Done editing."""
     pid = (await make_project(session, name="P")).id
@@ -354,9 +348,7 @@ async def test_qty_edit_returns_partial_for_htmx(
     assert "<html" not in resp.text.lower()
 
 
-async def test_qty_edit_redirects_for_non_htmx(
-    client: AsyncClient, session: AsyncSession
-) -> None:
+async def test_qty_edit_redirects_for_non_htmx(client: AsyncClient, session: AsyncSession) -> None:
     """Non-HTMX clients (curl, plain HTML form fallback) still get the
     303 redirect so they can resume normal page navigation."""
     pid = (await make_project(session, name="P")).id
@@ -404,9 +396,7 @@ async def test_empty_bom_submit_via_htmx_is_a_noop(
     assert await link_svc.list_project_items(session, pid) == []
 
 
-async def test_model_qty_to_print_inline_edit(
-    client: AsyncClient, session: AsyncSession
-) -> None:
+async def test_model_qty_to_print_inline_edit(client: AsyncClient, session: AsyncSession) -> None:
     pid = (await make_project(session, name="P")).id
     mid = (await make_model(session, name="Bracket")).id
     aid = await add_model_asset(session, mid)
@@ -569,9 +559,7 @@ async def test_model_status_rejects_invalid_value(
     assert rows[0].link.status == "pending"
 
 
-async def test_edit_mode_renders_inline_widgets(
-    client: AsyncClient, session: AsyncSession
-) -> None:
+async def test_edit_mode_renders_inline_widgets(client: AsyncClient, session: AsyncSession) -> None:
     """In edit mode the detail page shows qty inputs (HTMX-wired) and
     the notes textarea inside the basic-fields form."""
     pid = (await make_project(session, name="Widgets")).id

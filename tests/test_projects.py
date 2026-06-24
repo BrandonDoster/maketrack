@@ -1,6 +1,6 @@
 import pytest
-from pydantic import ValidationError
 from httpx import AsyncClient
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from maketrack.schemas.project import ProjectCreate
