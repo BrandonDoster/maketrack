@@ -5,6 +5,8 @@ can call each tool as a plain async function in tests rather than
 spinning up the streamable-HTTP transport. The `db_engine` fixture
 already gives us an isolated SQLite for each test, and the tools open
 their own sessions via get_sessionmaker, so the tools see the same DB.
+State is seeded through the service-backed factory helpers (which commit)
+so the tools' own sessions read it back.
 """
 
 import base64
@@ -27,6 +29,18 @@ from maketrack.mcp.server import (
     project_shopping_list,
     set_model_thumbnail,
     upload_model_asset,
+)
+from tests.factories import (
+    LocalFilamentFactory,
+    PrinterFactory,
+    add_model_asset,
+    link_filament,
+    link_item,
+    make_inventory_item,
+    make_model,
+    make_project,
+    persist,
+    update_project,
 )
 
 pytestmark = pytest.mark.usefixtures("db_engine")
@@ -51,10 +65,10 @@ def _b64(data: bytes) -> str:
 # ── read tools ────────────────────────────────────────────────────────────
 
 
-async def test_list_projects_filters_by_status(client) -> None:
-    a = await client.post("/api/projects", json={"name": "Active"})
-    await client.patch(f"/api/projects/{a.json()['id']}", json={"status": "printing"})
-    await client.post("/api/projects", json={"name": "Idle"})
+async def test_list_projects_filters_by_status(session) -> None:
+    a = await make_project(session, name="Active")
+    await update_project(session, a.id, status="printing")
+    await make_project(session, name="Idle")
 
     rows = await list_projects(status="printing")
     assert [r["name"] for r in rows] == ["Active"]
@@ -63,17 +77,12 @@ async def test_list_projects_filters_by_status(client) -> None:
     assert {r["name"] for r in rows_all} == {"Active", "Idle"}
 
 
-async def test_get_project_includes_links(client) -> None:
-    p = await client.post("/api/projects", json={"name": "P"})
-    pid = p.json()["id"]
-    inv = await client.post("/api/inventory", json={"name": "Bolt", "quantity": 5})
-    iid = inv.json()["id"]
-    await client.post(
-        f"/api/projects/{pid}/items",
-        json={"inventory_item_id": iid, "qty_required": 10},
-    )
+async def test_get_project_includes_links(session) -> None:
+    project = await make_project(session, name="P")
+    item = await make_inventory_item(session, name="Bolt", quantity=5)
+    await link_item(session, project.id, inventory_item_id=item.id, qty_required=10)
 
-    detail = await get_project(project_id=pid)
+    detail = await get_project(project_id=project.id)
     assert detail["name"] == "P"
     assert len(detail["items"]) == 1
     assert detail["items"][0]["inventory_name"] == "Bolt"
@@ -82,14 +91,14 @@ async def test_get_project_includes_links(client) -> None:
     assert detail["filaments"] == []
 
 
-async def test_get_project_missing_raises(client) -> None:
+async def test_get_project_missing_raises() -> None:
     with pytest.raises(NotFoundError):
         await get_project(project_id=99999)
 
 
-async def test_list_models_basic(client) -> None:
-    await client.post("/api/models", json={"name": "Hero", "tags": ["voron"]})
-    await client.post("/api/models", json={"name": "Other"})
+async def test_list_models_basic(session) -> None:
+    await make_model(session, name="Hero", tags=["voron"])
+    await make_model(session, name="Other")
     rows = await list_models()
     names = {r["name"] for r in rows}
     assert names == {"Hero", "Other"}
@@ -98,14 +107,9 @@ async def test_list_models_basic(client) -> None:
     assert [r["name"] for r in filtered] == ["Hero"]
 
 
-async def test_get_model_includes_assets(client) -> None:
-    m = await client.post("/api/models", json={"name": "M"})
-    mid = m.json()["id"]
-    upload = await client.post(
-        f"/api/models/{mid}/assets",
-        files={"file": ("part.stl", io.BytesIO(_stl_bytes()), "model/stl")},
-    )
-    asset_id = upload.json()["id"]
+async def test_get_model_includes_assets(session) -> None:
+    mid = (await make_model(session, name="M")).id
+    asset_id = await add_model_asset(session, mid, "part.stl")
 
     detail = await get_model(model_id=mid)
     assert detail["name"] == "M"
@@ -114,9 +118,7 @@ async def test_get_model_includes_assets(client) -> None:
     assert detail["assets"][0]["asset_type"] == "stl"
 
 
-async def test_list_filaments(client, session) -> None:
-    from tests.factories import LocalFilamentFactory, persist
-
+async def test_list_filaments(session) -> None:
     await persist(session, LocalFilamentFactory(name="Black PLA", material="PLA"))
     await persist(session, LocalFilamentFactory(name="White PETG", material="PETG"))
     await session.commit()
@@ -125,9 +127,7 @@ async def test_list_filaments(client, session) -> None:
     assert [r["name"] for r in pla] == ["Black PLA"]
 
 
-async def test_find_filament_for_project_coverage_states(client, session) -> None:
-    from tests.factories import LocalFilamentFactory, persist
-
+async def test_find_filament_for_project_coverage_states(session) -> None:
     plenty = await persist(session, LocalFilamentFactory(name="Plenty", remaining_weight_g=1000))
     short = await persist(session, LocalFilamentFactory(name="Short", remaining_weight_g=10))
     unknown = await persist(
@@ -135,20 +135,10 @@ async def test_find_filament_for_project_coverage_states(client, session) -> Non
     )
     await session.commit()
 
-    p = await client.post("/api/projects", json={"name": "P"})
-    pid = p.json()["id"]
-    await client.post(
-        f"/api/projects/{pid}/filaments",
-        json={"filament_id": plenty.id, "est_weight_g": 200},
-    )
-    await client.post(
-        f"/api/projects/{pid}/filaments",
-        json={"filament_id": short.id, "est_weight_g": 200},
-    )
-    await client.post(
-        f"/api/projects/{pid}/filaments",
-        json={"filament_id": unknown.id, "est_weight_g": 200},
-    )
+    pid = (await make_project(session, name="P")).id
+    await link_filament(session, pid, plenty.id, est_weight_g=200)
+    await link_filament(session, pid, short.id, est_weight_g=200)
+    await link_filament(session, pid, unknown.id, est_weight_g=200)
 
     rows = await find_filament_for_project(project_id=pid)
     coverage_by_name = {r["filament_name"]: r["coverage"] for r in rows}
@@ -159,15 +149,10 @@ async def test_find_filament_for_project_coverage_states(client, session) -> Non
     }
 
 
-async def test_project_shopping_list_global_and_per_project(client) -> None:
-    inv = await client.post("/api/inventory", json={"name": "M3 Bolt", "quantity": 5})
-    iid = inv.json()["id"]
-    p = await client.post("/api/projects", json={"name": "P"})
-    pid = p.json()["id"]
-    await client.post(
-        f"/api/projects/{pid}/items",
-        json={"inventory_item_id": iid, "qty_required": 20},
-    )
+async def test_project_shopping_list_global_and_per_project(session) -> None:
+    item = await make_inventory_item(session, name="M3 Bolt", quantity=5)
+    pid = (await make_project(session, name="P")).id
+    await link_item(session, pid, inventory_item_id=item.id, qty_required=20)
 
     global_list = await project_shopping_list()
     assert len(global_list) == 1
@@ -179,15 +164,16 @@ async def test_project_shopping_list_global_and_per_project(client) -> None:
     assert project_list[0]["still_to_buy"] == 15
 
 
-async def test_list_printers(client) -> None:
-    await client.post("/api/printers", json={"name": "Voron"})
+async def test_list_printers(session) -> None:
+    await persist(session, PrinterFactory(name="Voron"))
+    await session.commit()
     rows = await list_printers()
     assert [r["name"] for r in rows] == ["Voron"]
 
 
-async def test_list_inventory_filters_by_category(client) -> None:
-    await client.post("/api/inventory", json={"name": "Bolt", "category": "hardware"})
-    await client.post("/api/inventory", json={"name": "Wire", "category": "electronic"})
+async def test_list_inventory_filters_by_category(session) -> None:
+    await make_inventory_item(session, name="Bolt", category="hardware")
+    await make_inventory_item(session, name="Wire", category="electronic")
 
     hw = await list_inventory(category="hardware")
     assert [r["name"] for r in hw] == ["Bolt"]
@@ -196,7 +182,7 @@ async def test_list_inventory_filters_by_category(client) -> None:
 # ── write tools ───────────────────────────────────────────────────────────
 
 
-async def test_create_model_via_mcp(client) -> None:
+async def test_create_model_via_mcp() -> None:
     out = await create_model(
         name="Mounted via LLM",
         description="Bracket for the Y-axis tensioner",
@@ -205,14 +191,13 @@ async def test_create_model_via_mcp(client) -> None:
     assert out["name"] == "Mounted via LLM"
     assert out["id"] is not None
 
-    # Visible via the regular HTTP API too — same DB.
-    listing = await client.get("/api/models")
-    assert any(m["name"] == "Mounted via LLM" for m in listing.json())
+    # Visible through the read tool too — same DB.
+    rows = await list_models()
+    assert any(m["name"] == "Mounted via LLM" for m in rows)
 
 
-async def test_upload_model_asset_with_3mf_extracts_thumbnail(client) -> None:
-    m = await client.post("/api/models", json={"name": "ThreeMF"})
-    mid = m.json()["id"]
+async def test_upload_model_asset_with_3mf_extracts_thumbnail(session) -> None:
+    mid = (await make_model(session, name="ThreeMF")).id
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
@@ -236,9 +221,8 @@ async def test_upload_model_asset_rejects_bad_base64() -> None:
         await upload_model_asset(model_id=1, filename="x.stl", content_base64="not===valid===")
 
 
-async def test_set_model_thumbnail_via_mcp(client) -> None:
-    m = await client.post("/api/models", json={"name": "T"})
-    mid = m.json()["id"]
+async def test_set_model_thumbnail_via_mcp(session) -> None:
+    mid = (await make_model(session, name="T")).id
     img = await upload_model_asset(model_id=mid, filename="hero.png", content_base64=_b64(_PNG))
 
     out = await set_model_thumbnail(model_id=mid, asset_id=img["id"])
