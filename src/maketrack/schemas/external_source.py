@@ -1,7 +1,6 @@
-from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 
 class ExternalSourceBase(BaseModel):
@@ -25,18 +24,3 @@ class ExternalSourceUpdate(BaseModel):
     field_map: dict[str, Any] | None = None
     ttl_seconds: int | None = Field(default=None, ge=60)
     enabled: bool | None = None
-
-
-class ExternalSourceRead(ExternalSourceBase):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    last_synced_at: datetime | None
-    sync_in_progress: bool
-    created_at: datetime
-    updated_at: datetime
-
-
-class HealthCheckResult(BaseModel):
-    healthy: bool
-    detail: str | None = None

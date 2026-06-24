@@ -1,8 +1,4 @@
-from datetime import datetime
-
-from pydantic import BaseModel, ConfigDict, Field
-
-from maketrack.schemas.location import LocationRead
+from pydantic import BaseModel, Field
 
 INVENTORY_CATEGORIES = ("hardware", "electronic", "tool", "other")
 
@@ -38,13 +34,3 @@ class InventoryItemUpdate(BaseModel):
     vendor_sku: str | None = None
     vendor_url: str | None = None
     notes: str | None = None
-
-
-class InventoryItemRead(InventoryItemBase):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    photo_path: str | None
-    location: LocationRead | None = None
-    created_at: datetime
-    updated_at: datetime

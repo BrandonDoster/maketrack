@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 PROJECT_STATUSES = ("planning", "printing", "done", "archived", "abandoned")
 ACTIVE_STATUSES = frozenset({"planning", "printing"})
@@ -37,21 +37,6 @@ class ProjectUpdate(BaseModel):
     completed_at: datetime | None = None
 
 
-class ProjectRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    name: str
-    description: str | None
-    status: str
-    printer_id: int | None
-    notes: str | None
-    tags: list[str]
-    completed_at: datetime | None
-    created_at: datetime
-    updated_at: datetime
-
-
 # ── link payloads ──────────────────────────────────────────────────────────
 
 
@@ -68,21 +53,6 @@ class ProjectModelLinkUpdate(BaseModel):
     notes: str | None = None
 
 
-class ProjectModelLinkRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    project_id: int
-    model_asset_id: int
-    qty_to_print: int
-    status: str | None
-    notes: str | None
-    # Hydrated by the route from joined ORM data so the UI doesn't N+1.
-    model_name: str | None = None
-    model_folder_name: str | None = None
-    asset_filename: str | None = None
-    model_thumbnail_path: str | None = None
-
-
 class ProjectFilamentLinkCreate(BaseModel):
     filament_id: int
     est_weight_g: float | None = Field(default=None, ge=0)
@@ -94,21 +64,6 @@ class ProjectFilamentLinkUpdate(BaseModel):
     est_weight_g: float | None = Field(default=None, ge=0)
     actual_weight_g: float | None = Field(default=None, ge=0)
     role: str | None = None
-
-
-class ProjectFilamentLinkRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    project_id: int
-    filament_id: int
-    est_weight_g: float | None
-    actual_weight_g: float | None
-    role: str | None
-    filament_name: str | None = None
-    filament_color_hex: str | None = None
-    filament_remaining_g: float | None = None
-    filament_source: str | None = None
 
 
 class ProjectItemLinkCreate(BaseModel):
@@ -133,25 +88,6 @@ class ProjectItemLinkUpdate(BaseModel):
     qty_required: float | None = Field(default=None, ge=0)
     qty_consumed: float | None = Field(default=None, ge=0)
     notes: str | None = None
-
-
-class ProjectItemLinkRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    project_id: int
-    inventory_item_id: int | None
-    qty_required: float
-    qty_consumed: float
-    notes: str | None
-    name: str | None = None
-    unit: str | None = None
-    # Hydrated from the joined InventoryItem when linked.
-    item_name: str | None = None
-    item_unit: str | None = None
-    item_on_hand: float | None = None
-    # Display name = item_name if linked else name.
-    display_name: str | None = None
 
 
 # ── BOM / shopping list ────────────────────────────────────────────────────

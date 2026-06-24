@@ -21,15 +21,6 @@ class PrinterUpdate(BaseModel):
     notes: str | None = None
 
 
-class PrinterRead(PrinterBase):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    photo_path: str | None = None
-    created_at: datetime
-    updated_at: datetime
-
-
 class _ProjectStub(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
